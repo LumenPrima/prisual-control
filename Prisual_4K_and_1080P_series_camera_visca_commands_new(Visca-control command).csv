@@ -1,0 +1,249 @@
+Control command set,,,,,,,,,,,,,,,
+,Yellow area represents commonly used commands,"X corresponds to the address bit in the camera menu - communication address. The default address for cameras is 1, so all commands start with 81.
+If multiple cameras need to be controlled, set different address bits for each camera in the camera's menu - settings. Then, based on the current address bit X (number) of the camera, send commands in the 8X format, such as 82, 83, and so on.
+Other parameters are usually set as com, 9600.
+If sending control commands through the network port, address bits are not considered because each camera has a different IP address. Network communication is done based on the IP address.
+
+When moving up and down, WW represents the speed level from 1 to 18, and VV represents the movement distance.
+
+When moving left and right, VV represents the speed level from 1 to 14, and WW represents the movement distance.
+
+Example: For an upward movement (Up format), the command 8x 01 06 01 VV WW 03 01 FF can be modified to 81 01 06 01 05 05 03 01 FF.
+Here, 1 represents the address bit of the camera to be controlled, and 05 05 represents the speed level and movement distance.""",,,,,,,,,,,,,
+No.,Function,Test category,Send commands ,Description,Serial port result,Result description,Network port result,Result description,,,,,,,
+1,AddressSet,Broadcast,88 30 01 FF,Address setting,OK,,OK,,,,,,,,
+2,CAM_Power?Power switch?,On,8x 01 04 00 02 FF,Power ON/OFF,OK,,OK,On,,,,,,,
+,,Off,8x 01 04 00 03 FF,,OK,,OK,Off,,,,,,,
+3,CAM_Zoom?Zoom?,Stop,8x 01 04 07 00 FF,,OK,,OK,zoom,,,,,,,
+,,Tele(Standard),8x 01 04 07 02 FF,,OK,,OK,"Fixed-speed zoom, the lens zooms in",,,,,,,
+,,Wide(Standard),8x 01 04 07 03 FF,,OK,,OK,"Fixed speed zoom, zoom out",,,,,,,
+,,Tele(Variable),8x 01 04 07 2p FF,p = 0(low) - 7(high),OK,,OK,"Variable speed zoom, the lens is zoomed in; p is the variable speed variable parameter; such as 81 01 04 07 29 FF",,,,,,,
+,,Wide(Variable),8x 01 04 07 3p FF,,OK,,OK,"Variable speed zoom, the lens zooms out; p is the variable parameter of zoom speed; such as 81 01 04 07 30 FF",,,,,,,
+,,Direct,8x 01 04 47 0p 0q 0r 0s FF,pqrs: Zoom Position Maximum pqrs: 4000,OK,,OK,"All commands must be entered manually, such as
+81 01 04 47 01 01 01 02 FF",,,,,,,
+4,CAM_Focus(Focus),Stop,8x 01 04 08 00 FF,,OK,,OK,Set to manual focus mode first,,,,,,,
+,,Far(Standard),8x 01 04 08 02 FF ,,OK,,OK,far (standard),,,,,,,
+,,Near(Standard),8x 01 04 08 03 FF,,OK,,OK,close,,,,,,,
+,,Far(Variable),8x 01 04 08 2p FF,p = 0(low) - 7(high),OK,,OK,far (variable),,,,,,,
+,,Near(Variable),8x 01 04 08 3p FF,,OK,,OK,close,,,,,,,
+,,Direct,8x 01 04 48 0p 0q 0r 0s FF,pqrs: Focus Position,OK,,OK,,,,,,,,
+,,Auto Focus,8x 01 04 38 02 FF,AF On/Off,OK,,OK,auto,,,,,,,
+,,Manual Focus,8x 01 04 38 03 FF,,OK,,OK,manaul,,,,,,,
+,,Auto/Manual,8x 01 04 38 10 FF,,OK,,OK,,,,,,,,
+5,CAM_WB(White balance),Auto,8x 01 04 35 00 FF,Normal Auto,OK,,OK,Corresponding menu white balance items,,,,,,,
+,,Indoor mode,8x 01 04 35 01 FF,Indoor mode,OK,,OK,,,,,,,,
+,,Outdoor mode,8x 01 04 35 02 FF,Outdoor mode,OK,,OK,,,,,,,,
+,,OnePush mode ,8x 01 04 35 03 FF,One Push WB mode,OK,,OK,one-click,,,,,,,
+,,Manual,8x 01 04 35 05 FF,Manual Control mode,OK,,OK,,,,,,,,
+,,OnePush trigger,8x 01 04 10 05 FF,One Push WB Trigger,OK,,OK,One click to take effect,,,,,,,
+,,VAR,8x 01 04 35 20 FF ,,OK,,OK,specify color temperature,,,,,,,
+6,Specify color temperature,up,8x 01 04 20 02 FF,,OK,,OK,"Change the white balance to the specified color temperature mode, and send it in single message mode",,,,,,,
+,,down,8x 01 04 20 03 FF,,OK,,OK,,,,,,,,
+,,reset,8x 01 04 20 00 FF,,OK,,OK,,,,,,,,
+,,direct,8x 01 04 20 00 xx FF,,OK,,OK,,,,,,,,
+7,CAM_Rgain(Red gain),Reset,8x 01 04 03 00 FF,Manual Control of R Gain,OK,,OK,"In manual color temperature mode
+",,,,,,,
+,,Up,8x 01 04 03 02 FF,,OK,,OK,,,,,,,,
+,,Down,8x 01 04 03 03 FF,,OK,,OK,,,,,,,,
+,,Direct,8x 01 04 43 00 00 0p 0q FF,pq: R Gain,OK,,OK,"Pay attention to the syntax, x, p, and q must be hexadecimal numbers",,,,,,,
+8,CAM_Bgain(Blue gain),Reset,8x 01 04 04 00 FF,Manual Control of B Gain,OK,,OK,Manually specify the color temperature mode,,,,,,,
+,,Up,8x 01 04 04 02 FF,,OK,,OK,,,,,,,,
+,,Down,8x 01 04 04 03 FF,,OK,,OK,,,,,,,,
+,,Direct,8x 01 04 44 00 00 0p 0q FF,pq: B Gain,OK,,OK,"Pay attention to the syntax, x, p, and q must be hexadecimal numbers",,,,,,,
+9,CAM_AE mode(Exposure mode),Full Auto,8x 01 04 39 00 FF,Automatic Exposure mode,OK,,OK,Automatic exposure,,,,,,,
+,,Manual,8x 01 04 39 03 FF,Manual Control mode,OK,,OK,Manaul,,,,,,,
+,,Shutter priority ,8x 01 04 39 0A FF,Shutter Priority Automatic Exposure mode,OK,,OK,Shutter priority,,,,,,,
+,,Iris priority,8x 01 04 39 0B FF,Iris Priority Automatic Exposure mode,OK,,OK,Aperture priority,,,,,,,
+,,Bright,8x 01 04 39 0D FF,Bright Mode(Manual control),OK,,OK,Brightness priority,,,,,,,
+10,"CAM_MeteringMode
+(Metering mode)",Average,8x 01 04 3A 00 FF,Average Metering,OK,,OK,Metering in Exposure - Average,,,,,,,
+,,Center-weighted,8x 01 04 3A 01 FF,Center-weighted Average Metering,OK,,OK,Metering in Exposure - Center,,,,,,,
+,,smart,8x 01 04 3A 02 FF,,OK,,OK,Metering in Exposure - Smart,,,,,,,
+,,top,8x 01 04 3A 03 FF,,OK,,OK,Metering in Exposure - Top,,,,,,,
+11,CAM_Shutter,Reset,8x 01 04 0A 00 FF,Shutter Setting,OK,,OK,Shutter,,,,,,,
+,,Up,8x 01 04 0A 02 FF,,OK,,OK,,,,,,,,
+,,Down,8x 01 04 0A 03 FF,,OK,,OK,,,,,,,,
+,,Direct,8x 01 04 4A 00 00 0p 0q FF,pq: Shutter Position,OK,,OK,"Pay attention to the syntax, x, p, and q must be hexadecimal numbers",,,,,,,
+12,CAM_Iris,Reset,8x 01 04 0B 00 FF,Iris Setting,OK,,OK,Aperture,,,,,,,
+,,Up,8x 01 04 0B 02 FF,,OK,,OK,,,,,,,,
+,,Down,8x 01 04 0B 03 FF,,OK,,OK,,,,,,,,
+,,Direct,8x 01 04 4B 00 00 0p 0q FF,pq: Iris Position,OK,,OK,"Pay attention to the syntax, x, p, and q must be hexadecimal numbers",,,,,,,
+13,CAM_Gain,Reset,8x 01 04 0C 00 FF,Gain Setting,OK,,OK,Exposure - Gain in Manual,,,,,,,
+,,Up,8x 01 04 0C 02 FF,,OK,,OK,,,,,,,,
+,,Down,8x 01 04 0C 03 FF,,OK,,OK,,,,,,,,
+,,Direct,8x 01 04 0C 00 00 0p 0q FF,pq: Gain Position,OK,,OK,,,,,,,,
+14,"Gain Limit(ain limited)
+customize",direct,81 01 04 2C 0p FF,p:  Gain  Position,OK,,OK,,,,,,,,
+,,reset,81 0A 11 24 00 FF,,OK,,NG,RX:90 60 02 FF ,,,,,,,
+,,Up,81 0A 11 24 02 FF,,OK,,NG,RX:90 60 02 FF ,,,,,,,
+,,Down,81 0A 11 24 03 FF,,OK,,NG,RX:90 60 02 FF ,,,,,,,
+15,CAM_Bright,Reset,8x 01 04 0D 00 FF,Bright Setting,OK,,OK,Exposure - brightness priority,,,,,,,
+,,Up,8x 01 04 0D 02 FF,,OK,,OK,,,,,,,,
+,,Down,8x 01 04 0D 03 FF,,OK,,OK,,,,,,,,
+,,Direct,8x 01 04 0D 00 00 0p 0q FF,pq: Bright Position,OK,,OK,81 01 04 0D 00 00 00 01 FF,,,,,,,
+16,CAM_ExpComp,On,8x 01 04 3E 02 FF,Exposure Compensation On/Off,OK,,OK,Exposure compensation,,,,,,,
+,,Off,8x 01 04 3E 03 FF,,OK,,OK,,,,,,,,
+,,Reset,8x 01 04 0E 00 FF,Exposure Compensation Amount Setting,OK,,OK,,,,,,,,
+,,Up,8x 01 04 0E 02 FF,,OK,,OK,Compensation level,,,,,,,
+,,Down,8x 01 04 0E 03 FF,,OK,,OK,Compensation level,,,,,,,
+,,Direct,8x 01 04 4E 00 00 0p 0q FF,pq: ExpComp Position,OK,,OK,,,,,,,,
+17,CAM_BackLight(Backlight),On,8x 01 04 33 02 FF,Back Light Compensation On/Off,OK,,OK,,,,,,,,
+,,Off,8x 01 04 33 03 FF,,OK,,OK,,,,,,,,
+18,Dynamic Range,reset,81 01 04 25 00 FF,,OK,,NG,RX:90 60 02 FF ,,,,,,,
+,,up,81 01 04 25 02 FF,,OK,,NG,RX:90 60 02 FF ,,,,,,,
+,,down,81 01 04 25 03 FF,,OK,,NG,RX:90 60 02 FF ,,,,,,,
+,,direct,81 01 04 25 00 00 00 0p FF,,OK,,NG,RX:90 60 02 FF ,,,,,,,
+19,CAM_NR(2D)(2D Noise Reduction),-,8x 01 04 53 0p FF,"p: NR Setting (0: Off, level 1 to 5)",OK,,OK,,,,,,,,
+20,CAM_NR(3D)(3D Noise Reduction),-,8x 01 04 54 0p FF,"p: NR Setting (0: Off, level 1 to 5)",OK,,OK,,,,,,,,
+21,CAM_Gamma,-,8x 01 04 5B 0p FF,"00?PC
+01:0.45
+02:0.5
+03:0.56
+04:0.63
+05?EXT",OK,,OK,Gamma,,,,,,,
+22,CAM_Flicker,-,8x 01 04 23 0p FF,"p: Flicker Settings
+(0: Off, 1: 50Hz, 2: 60Hz)",OK,,OK,Flashing,,,,,,,
+23,CAM_Aperture,Reset,8x 01 04 02 00 FF,Aperture Control,OK,,OK,Sharpness,,,,,,,
+,,Auto,8x 01 04 05 02 FF,,OK,,OK,,,,,,,,
+,,Up,8x 01 04 02 02 FF,,OK,,OK,,,,,,,,
+,,Down,8x 01 04 02 03 FF,,OK,,OK,,,,,,,,
+,,Direct,8x 01 04 42 00 00 0p 0q FF,pq: Aperture Gain,OK,,OK,,,,,,,,
+24,CAM_PictureEffect,Off,8x 01 04 63 00 FF,Picture Effect Setting,OK,,OK,Black and white mode,,,,,,,
+,,B&W,8x 01 04 63 04 FF,,OK,,OK,,,,,,,,
+25,CAM_Memory(Preset?,Reset,8x 01 04 3F 00 pp FF,pp: Memory Number(=0 to 127),OK,,OK,"PP, which represents which preset position to set or call, is the variable of the preset point. Such as 01 or 02. It is impossible to only set one preset position, so which number you set and which one you adjust, there must be a difference",,,,,,,
+,,Set,8x 01 04 3F 01 pp FF,,OK,,OK,"PP, which represents which preset position to set or call, is the variable of the preset point.",,,,,,,
+,,Recall,8x 01 04 3F 02 pp FF,,OK,,OK,"PP, which represents which preset position to set or call, is the variable of the preset point.",,,,,,,
+,,Adjust preset speed up,8x 0A 11 35 02 FF,,OK,,NG,RX:90 60 02 FF ,,,,,,,
+,,Adjust preset speed down,8x 0A 11 35 03 FF ,,OK,,NG,RX:90 60 02 FF ,,,,,,,
+26,CAM_LR_Reverse (image flipped horizontally),On,8x 01 04 61 02 FF,Image Flip Horizontal On/Off,OK,,OK,,,,,,,,
+,,Off,8x 01 04 61 03 FF,,OK,,OK,,,,,,,,
+27,CAM_PictureFlip (image flipped vertically),On,8x 01 04 66 02 FF,Image Flip Vertical On/Off,OK,,OK,,,,,,,,
+,,Off,8x 01 04 66 03 FF,,OK,,OK,,,,,,,,
+28,CAM_ColorGain,Diret,8x 01 04 49 00 00 00 0p FF,p: Color Gain setting 0h (60%) to Eh (200%),OK,,OK,Saturation,,,,,,,
+29,Infrared remote control,On,8x 01 04 01 02 FF,Infrared Mode On/Off,OK,,NG,RX:90 60 02 FF ,,,,,,,
+,,Off,8x 01 06 08 03 FF,,OK,,NG,RX:90 60 02 FF ,,,,,,,
+30,CAM_ColorHue,Direct,8x 01 04 4F 00 00 00 0p FF,p: Color Hue setting 0h (? 7 dgrees) to Eh ( +7 degrees),OK,,OK,Tone,,,,,,,
+31,CAM_AWBSensitivity,High,8x 01 04 A9 00 FF,High,OK,,OK,White balance sensitivity,,,,,,,
+,,Normal,8x 01 04 A9 01 FF,Normal,OK,,OK,,,,,,,,
+,,Low,8x 01 04 A9 02 FF,Low,OK,,OK,,,,,,,,
+32,CAM_AFSensitivity,High,8x 01 04 58 01 FF,AF Sensitivity High/Normal/Low,OK,,OK,Focus sensitivity,,,,,,,
+,,Normal,8x 01 04 58 02 FF,,OK,,OK,,,,,,,,
+,,Low,8x 01 04 58 03 FF,,OK,,OK,,,,,,,,
+33,CAM_AFZone,Top,8x 01 04 AA 00 FF,AF Zone weight select,OK,,OK,Focus area,,,,,,,
+,,Center,8x 01 04 AA 01 FF,,OK,,OK,,,,,,,,
+,,Bottom,8x 01 04 AA 02 FF,,OK,,OK,,,,,,,,
+34,CAM_Flip(Flip),Off,8x 01 04 A4 00 FF,Single Command For Video Flip,OK,,OK,Flip,,,,,,,
+,,Flip-H,8x 01 04 A4 01 FF,,OK,,OK,,,,,,,,
+,,Flip-V,8x 01 04 A4 02 FF,,OK,,OK,,,,,,,,
+,,Flip-HV,8x 01 04 A4 03 FF,,OK,,OK,,,,,,,,
+35,CAM_Brightness(Brightness),Direct,8x 01 04 A1 00 00 0p 0q FF,pq: Brightness Position,OK,,OK,,,,,,,,
+36,CAM_Contrast(Contrast),Direct,8x 01 04 A2 00 00 0p 0q FF,pq: Contrast Position,OK,,OK,,,,,,,,
+37,CAM_SettingSave(Seeting Save),Save,8x 01 04 A5 10 FF,Save Current Setting,OK,,OK,,,,,,,,
+38,CAM_SettingReset,Reset,8x 01 04 A0 10 FF,Reset Factory Setting,OK,,OK,,,,,,,,
+39,CAM_DVIMode(DVIMode),HDMI,8x 01 04 AB 02 FF,"DVI output mode, default: HDMI",OK,,OK,,,,,,,,
+,,DVI,8x 01 04 AB 03 FF,,OK,,OK,,,,,,,,
+40,Pan_tiltDrive?direction turn?,Up,8x 01 06 01 VV WW 03 01 FF,"VV: Pan speed 0x01 (low speed) to 0x18 (high speed)
+WW: Tilt speed 0x01 (low speed) to 0x14 (high speed)
+YYYY: Pan Position
+ZZZZ: Tilt Position",OK,,OK,"Pay attention to modify the value of VV, WW",,,,,,,
+,,Down,8x 01 06 01 VV WW 03 02 FF,,OK,,OK,Direction,,,,,,,
+,,Left,8x 01 06 01 VV WW 01 03 FF,,OK,,OK,,,,,,,,
+,,Right,8x 01 06 01 VV WW 02 03 FF,,OK,,OK,,,,,,,,
+,,Upleft,8x 01 06 01 VV WW 01 01 FF,,OK,,OK,,,,,,,,
+,,Upright,8x 01 06 01 VV WW 02 01 FF,,OK,,OK,,,,,,,,
+,,DownLeft,8x 01 06 01 VV WW 01 02 FF,,OK,,OK,,,,,,,,
+,,DownRight,8x 01 06 01 VV WW 02 02 FF,,OK,,OK,,,,,,,,
+,,Stop,8x 01 06 01 VV WW 03 03 FF,,OK,,OK,,,,,,,,
+,,AbsolutePosition,"8x 01 06 02 VV WW 
+0Y 0Y 0Y 0Y 0Z 0Z 0Z 0Z FF",,OK,,OK,"Pay attention to modify the value of VV, WW, Y",,,,,,,
+,,RelativePosition,"8x 01 06 03 VV WW 
+0Y 0Y 0Y 0Y 0Z 0Z 0Z 0Z FF",,OK,,OK,,,,,,,,
+,,Home,8x 01 06 04 FF,,OK,,OK,,,,,,,,
+,,Reset,8x 01 06 05 FF,,OK,,OK,,,,,,,,
+41,Pan_tiltLimitSet,LimitSet,"8x 01 06 07 00 0W
+0Y 0Y 0Y 0Y 0Z 0Z 0Z 0Z FF","W: 1 UpRight 0: DownLeft
+YYYY: Pan Limit Position
+ZZZZ: Tilt Position",OK,,OK,RX:90 41 FF 90 51 FF ,,,,,,,
+,,LimitClear,"8x 01 06 07 01 0W
+07 0F 0F 0F 07 0F 0F 0F FF",,OK,,OK,,,,,,,,
+,RESET,,81 01 06 05 FF,,OK,,OK,,,,,,,,
+,HOME,,81 01 06 04 FF,,OK,,OK,,,,,,,,
+42,menu,On,81 01 06 06 02 FF,,OK,,OK,,,,,,,,
+,,Off,81 01 06 06 03 FF,,OK,,OK,,,,,,,,
+,,On/Off,81 01 06 06 10 FF,,OK,,OK,,,,,,,,
+,,Ok,81 01 06 06 05 FF,,OK,,OK,,,,,,,,
+,,Return,81 01 06 06 04 FF,,OK,,OK,,,,,,,,
+,,One is to lift down and right,81 01 06 07 01 01 07 0f 0f 0f 07 0f 0f 0f ff,,,,,,,,,,,,
+,,One is to lift up and then to the left,81 01 06 07 01 00 07 0f 0f 0f 07 0f 0f 0f ff,,,,,,,,,,,,
+,,Query current location,"Focus position: 81 09 04 48 FF
+PTZ position: 81 09 06 12 FF
+Zoom position: 81 09 04 47 FF
+ZOOM control: 81 01 04 47 00 0p 0q 0r 0s FF
+00 is the speed, this is the speed level of ZOOM zooming, in fact, the default is the speed level of 05, and the fastest zooming is the speed level of 07;
+0p 0q 0r 0s is the same position;",,,,,,,,,,,,
+,,The Ambarella machine of the CV22 scheme is universal 4K model and new gen 1080p 87 version,"Turn on humanoid tracking
+TX:81 0A 11 54 02 FF
+RX:90 42 FF 90 52 FF
+======== Turn off humanoid tracking ========
+TX:81 0A 11 54 03 FF
+RX:90 41 FF 90 51 FF
+========Select left========
+TX:81 0A 11 A3 02 FF
+RX:90 42 FF 90 52 FF
+======== Select the right ========
+TX:81 0A 11 A3 03 FF
+RX:90 41 FF 90 51 FF
+======== Confirm to open tracking ========
+TX:81 0A 11 A3 04 FF
+RX:90 42 FF
+RX:90 52 FF
+======== Turn on Voice Tracking ========
+TX:81 0B 02 10 02 FF
+RX:90 60 02 FF
+======== Turn off voice tracking ========
+TX:81 0B 02 10 03 FF
+RX:90 60 02 FF",,,,,,,,,,,,
+,,tally light status,"When the camera is powered on for self-test, the tally light is always on; when the camera completes the self-test, the tally light is off;
+VISCA:
+81 01 7E 01 0A 00 02 FF Red light on
+81 01 7E 01 0A 00 01 FF Green light on
+81 01 7E 01 0A 00 03 FF No light",,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,

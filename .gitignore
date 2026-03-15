@@ -1,0 +1,13 @@
+# Binaries (root only, not cmd/ source dirs)
+/shim
+/shim.exe
+/joyprobe
+/joyprobe-raw
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE
+.vscode/
+.idea/
