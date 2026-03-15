@@ -1,81 +1,84 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"os"
 	"os/signal"
 	"sort"
-	"time"
 
-	"github.com/veandco/go-sdl2/sdl"
+	"prisual_control/internal/input"
 )
 
 type axisStats struct {
-	min     int16
-	max     int16
-	seen    map[int16]bool
-	current int16
-	prev    int16
-	hasPrev bool
-	minDelta uint16 // smallest non-zero change between consecutive readings
+	min      float64
+	max      float64
+	seen     map[float64]bool
+	current  float64
+	prev     float64
+	hasPrev  bool
+	minDelta float64
 }
 
 func main() {
-	if err := sdl.Init(sdl.INIT_JOYSTICK); err != nil {
-		fmt.Fprintf(os.Stderr, "SDL2 init failed: %v\n", err)
-		os.Exit(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch := make(chan input.JoystickState, 1)
+	go input.PollJoystick(ctx, ch)
+
+	fmt.Println("Waiting for joystick...")
+
+	// Wait for first connected state
+	var state input.JoystickState
+	for state = range ch {
+		if state.Connected {
+			break
+		}
 	}
-	defer sdl.Quit()
 
-	n := sdl.NumJoysticks()
-	if n <= 0 {
-		fmt.Fprintln(os.Stderr, "No joysticks found.")
-		os.Exit(1)
-	}
-
-	joy := sdl.JoystickOpen(0)
-	if joy == nil {
-		fmt.Fprintln(os.Stderr, "Failed to open joystick 0.")
-		os.Exit(1)
-	}
-	defer joy.Close()
-
-	numAxes := joy.NumAxes()
-	numButtons := joy.NumButtons()
-	numHats := joy.NumHats()
-
-	fmt.Printf("Joystick: %s\n", joy.Name())
-	fmt.Printf("  Axes: %d  Buttons: %d  Hats: %d\n", numAxes, numButtons, numHats)
-	fmt.Printf("  GUID: %s\n", sdl.JoystickGetGUIDString(joy.GUID()))
-	fmt.Println()
+	fmt.Printf("Joystick: %s\n", state.Name)
 	fmt.Println("Move every axis through its FULL range, then press Ctrl+C.")
 	fmt.Println()
 
-	axes := make([]axisStats, numAxes)
+	axes := make([]axisStats, 4)
 	for i := range axes {
-		axes[i].seen = make(map[int16]bool)
-		axes[i].minDelta = math.MaxUint16
+		axes[i].seen = make(map[float64]bool)
+		axes[i].min = 999
+		axes[i].max = -999
+		axes[i].minDelta = 999
+	}
+
+	// Init from first state
+	for i := 0; i < 4; i++ {
+		axes[i].current = state.Axes[i]
+		axes[i].seen[state.Axes[i]] = true
+		axes[i].min = state.Axes[i]
+		axes[i].max = state.Axes[i]
+		axes[i].prev = state.Axes[i]
+		axes[i].hasPrev = true
 	}
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
-
-	ticker := time.NewTicker(5 * time.Millisecond)
-	defer ticker.Stop()
 
 	for {
 		select {
 		case <-sig:
 			printReport(axes)
 			return
-		case <-ticker.C:
+		case state = <-ch:
 		}
 
-		sdl.PumpEvents()
+		if !state.Connected {
+			fmt.Println("\nJoystick disconnected!")
+			printReport(axes)
+			return
+		}
 
-		for i := 0; i < numAxes; i++ {
-			v := joy.Axis(i)
+		for i := 0; i < 4; i++ {
+			v := state.Axes[i]
 			axes[i].current = v
 			axes[i].seen[v] = true
 			if v < axes[i].min {
@@ -84,24 +87,19 @@ func main() {
 			if v > axes[i].max {
 				axes[i].max = v
 			}
-			// Track smallest change between consecutive readings
 			if axes[i].hasPrev && v != axes[i].prev {
-				d := int32(v) - int32(axes[i].prev)
-				if d < 0 {
-					d = -d
-				}
-				if uint16(d) < axes[i].minDelta {
-					axes[i].minDelta = uint16(d)
+				d := math.Abs(v - axes[i].prev)
+				if d < axes[i].minDelta {
+					axes[i].minDelta = d
 				}
 			}
 			axes[i].prev = v
 			axes[i].hasPrev = true
 		}
 
-		// Live display
 		fmt.Print("\r")
-		for i := 0; i < numAxes; i++ {
-			fmt.Printf("  A%d: %+6d (%4d vals)", i, axes[i].current, len(axes[i].seen))
+		for i := 0; i < 4; i++ {
+			fmt.Printf("  A%d: %+.4f (%4d vals)", i, axes[i].current, len(axes[i].seen))
 		}
 		fmt.Print("   ")
 	}
@@ -110,24 +108,19 @@ func main() {
 func printReport(axes []axisStats) {
 	fmt.Println()
 	fmt.Println()
-	fmt.Println("=== SDL2 Axis Report ===")
+	fmt.Println("=== Axis Report ===")
 	fmt.Println()
 	for i, a := range axes {
 		discrete := len(a.seen)
-		rawRange := int(a.max) - int(a.min)
-		bits := 0
-		for b := discrete; b > 1; b >>= 1 {
-			bits++
-		}
+		r := a.max - a.min
 
-		// Compute actual min step from sorted unique values
-		vals := make([]int, 0, discrete)
+		vals := make([]float64, 0, discrete)
 		for v := range a.seen {
-			vals = append(vals, int(v))
+			vals = append(vals, v)
 		}
-		sort.Ints(vals)
+		sort.Float64s(vals)
 
-		minStep := 0
+		minStep := 0.0
 		if len(vals) > 1 {
 			minStep = vals[1] - vals[0]
 			for j := 2; j < len(vals); j++ {
@@ -138,19 +131,23 @@ func printReport(axes []axisStats) {
 			}
 		}
 
-		avgStep := 0
+		avgStep := 0.0
 		if discrete > 1 {
-			avgStep = rawRange / (discrete - 1)
+			avgStep = r / float64(discrete-1)
 		}
 
+		focusRange := 4352.0 // 0x1180 - 0x0080
+		focusPerStep := focusRange * minStep / 2.0
+
 		fmt.Printf("Axis %d:\n", i)
-		fmt.Printf("  Min: %+6d  Max: %+6d  Range: %d\n", a.min, a.max, rawRange)
-		fmt.Printf("  Discrete values seen: %d  (~%d bits)\n", discrete, bits)
-		fmt.Printf("  Min step (sorted):      %d\n", minStep)
-		if a.minDelta < math.MaxUint16 {
-			fmt.Printf("  Min step (consecutive): %d\n", a.minDelta)
+		fmt.Printf("  Min: %+.6f  Max: %+.6f  Range: %.6f\n", a.min, a.max, r)
+		fmt.Printf("  Discrete values seen: %d\n", discrete)
+		fmt.Printf("  Min step (sorted):      %.6f\n", minStep)
+		if a.minDelta < 999 {
+			fmt.Printf("  Min step (consecutive): %.6f\n", a.minDelta)
 		}
-		fmt.Printf("  Avg step:               %d  (ideal=1)\n", avgStep)
+		fmt.Printf("  Avg step:               %.6f\n", avgStep)
+		fmt.Printf("  Focus positions per min step: %.1f\n", focusPerStep)
 		fmt.Println()
 	}
 }
