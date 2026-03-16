@@ -1,6 +1,6 @@
 # Prisual Control
 
-Multi-camera PTZ control shim for church live streaming. Maps a Logitech Extreme 3D Pro joystick to Prisual TEN-20N Pro PTZ cameras via VISCA, with vMix integration for switching, tally, and camera discovery.
+Multi-camera PTZ control shim for church live streaming. Maps any USB joystick/gamepad to Prisual TEN-20N Pro PTZ cameras via VISCA, with vMix integration for switching, tally, and camera discovery.
 
 ## Why
 
@@ -24,9 +24,55 @@ Or single camera without vMix:
 ./shim --camera 10.2.2.212
 ```
 
-## Controls
+With a custom controller config:
+```bash
+./shim --config configs/xbox.json --vmix 10.2.2.195
+```
 
-### Joystick (Logitech Extreme 3D Pro)
+## Controller Configuration
+
+Any USB joystick or gamepad can be used. The shim uses a JSON config file to map physical axes and buttons to logical actions.
+
+**Default**: Logitech Extreme 3D Pro (no `--config` needed).
+
+**To set up a new controller:**
+
+1. Probe the controller to see axes and buttons:
+   ```bash
+   go build -o joyprobe ./cmd/joyprobe && ./joyprobe
+   ```
+
+2. Generate a starter config:
+   ```bash
+   ./shim --dump-config > configs/mycontroller.json
+   ```
+
+3. Edit the JSON — remap axis indices, adjust deadzones/expo, assign buttons:
+   ```json
+   {
+     "name": "My Controller",
+     "axes": {
+       "pan":   { "index": 0, "deadzone": 0.10, "expo": 2.5, "inverted": false },
+       "tilt":  { "index": 1, "deadzone": 0.10, "expo": 2.5, "inverted": true },
+       "zoom":  { "index": 2, "deadzone": 0.15, "expo": 2.5, "inverted": false },
+       "focus": { "index": 3, "deadzone": 0,    "expo": 0,   "inverted": false }
+     },
+     "buttons": {
+       "af_hold": 0, "af_latch": 1, "program_override": 2,
+       "fade": 3, "cut": 4, "cycle_preview": 5,
+       "preset_save": 1, "presets": [6, 7, 8, 9, 10, 11]
+     }
+   }
+   ```
+
+4. Run with the config:
+   ```bash
+   ./shim --config configs/mycontroller.json --vmix 10.2.2.195
+   ```
+
+Set any button to `-1` to leave it unmapped. Example configs included for the Extreme 3D Pro and Xbox controller.
+
+## Controls (Default: Logitech Extreme 3D Pro)
 
 | Control | Function |
 |---|---|
@@ -41,7 +87,7 @@ Or single camera without vMix:
 
 ### Focus System
 
-The throttle slider uses **anchor-relative** control for fine focus:
+The throttle/slider uses **anchor-relative** control for fine focus:
 
 - **Presets and AF set the anchor** — wherever the slider is at that moment becomes "zero"
 - **Moving the slider adjusts focus** relative to the anchor (±300 positions by default)
@@ -66,7 +112,7 @@ Re-anchoring happens automatically on preset recall, AF release, and startup.
 │  ● 2 10.2.2.215    PVW ◀                                    │
 │  ○ 3 10.2.2.218     ·                                       │
 │                                                              │
-│ AXES  Logitech Extreme 3D                                    │
+│ AXES  Logitech Extreme 3D [Logitech Extreme 3D Pro]          │
 │    Pan ──────────────┼──────◆───────   +1234                 │
 │   Tilt ────────◆─────┼───────────────   -456                 │
 │   Zoom ████████████░░░░░░░░░░░░░░░░░░  0x1234                │
@@ -89,12 +135,12 @@ Re-anchoring happens automatically on preset recall, AF release, and startup.
 |---|---|---|
 | `--vmix` | | vMix host IP (enables discovery + tally + transitions) |
 | `--camera` | | Single camera IP (fallback if no vMix) |
+| `--config` | | Controller config JSON file (default: built-in Extreme 3D Pro) |
+| `--dump-config` | | Print default controller config JSON and exit |
 | `--visca-port` | 5678 | VISCA TCP port |
-| `--expo` | 2.5 | Expo curve for spring-return axes |
 | `--focus-hz` | 10 | Focus command send rate |
 | `--focus-range` | 300 | Focus half-range (full slider = ±N positions) |
 | `--fade-ms` | 1000 | Fade transition duration in milliseconds |
-| `--invert-tilt` | true | Invert tilt axis (stick forward = tilt down) |
 
 ## Building
 
@@ -114,9 +160,19 @@ go build ./cmd/shim
 
 ## Hardware
 
-- **Cameras**: Prisual TEN-20N Pro (NDI HX3) — VISCA over IP on TCP port 5678
-- **Joystick**: Logitech Extreme 3D Pro — 4 axes (8-10 bit), 12 buttons, 1 POV hat
+- **Cameras**: Prisual TEN-20N Pro (NDI HX2) — VISCA over IP on TCP port 5678
+- **Controllers**: Any USB joystick/gamepad (tested: Logitech Extreme 3D Pro)
 - **Switcher**: vMix on Windows — HTTP API for discovery, TCP API for tally + commands
+
+## Camera Documentation
+
+See [`docs/camera_capabilities.md`](docs/camera_capabilities.md) for a comprehensive probe of the Prisual camera's IP capabilities including:
+- All streaming modes (H.264/H.265, NDI HX2, RTSP, SRT)
+- Full CGI API endpoint list (documented and undocumented)
+- Image/exposure/white balance settings
+- VISCA inquiry results
+- NDI Full/HX2 toggle
+- Firmware update info
 
 ## Diagnostic Tools
 
