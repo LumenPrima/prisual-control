@@ -52,21 +52,36 @@ Audio:    AAC LC, 48kHz, stereo
 
 ### NDI
 ```
-Mode:     NDI HX2 (H.264 based, NOT full NDI)
-Profile:  264P60 (H.264, 1080p60)
-Channel:  "NDI HX2"
-Full NDI: 0 (not supported — HX2 only)
-License:  Active
-Discovery: Disabled (uses manual registration)
-Multicast: Disabled
+NDI version: v5.1.1
+Mode:        NDI HX2 (H.264 or H.265 selectable)
+Channel:     "NDI HX2"
+Full NDI:    Toggleable (requires reboot)
+License:     Active
+Discovery:   Disabled (uses manual registration)
+Multicast:   Disabled
 ```
 
-**Note**: Full NDI (uncompressed/SpeedHQ) is NOT available. The camera only supports NDI|HX2, which is H.264 wrapped in NDI protocol. This adds latency compared to full NDI.
+**NDI mode options** (changeable live, no reboot):
+- `264P60` — H.264 at 60fps (default)
+- `264P50` — H.264 at 50fps
+- `265P60` — H.265 at 60fps
+- `265P50` — H.265 at 50fps
+
+**Full NDI toggle** (requires reboot):
+- Enable: `curl "http://camera/cgi-bin/param.cgi?post_ndi_info&Full_NDI=1"`
+- Disable: `curl "http://camera/cgi-bin/param.cgi?post_ndi_info&Full_NDI=false"`
+- **IMPORTANT**: Use `false` to disable, NOT `0` — the firmware treats `0` as truthy (bug)
+- When enabled, camera advertises full NDI (SpeedHQ) capability to receivers
+- Actual codec negotiation happens between camera and NDI receiver (vMix)
+
+**NDI vs advertised specs**: Amazon listing claims NDI 6 / HX3 support, but camera ships with NDI 5.1.1 / HX2. Newer firmware (V8.03.13 or later) on Prisual downloads page claims NDI 6.1.1 / HX3 support — firmware update may be needed.
+
+**Measured bandwidth**: ~62 Mbps actual for 1080p60 H.264 over RTSP (matches configured `bps_1=62000`).
 
 ### Available Codecs
 - H.264 (Main Profile and High Profile confirmed)
-- No H.265/HEVC evidence found
-- No SRT streaming active (srt_en=1 but no active connection)
+- **H.265/HEVC supported** — for both RTSP streams and NDI
+- SRT available but not connected (srt_en=1)
 - RTMP available but disabled
 - Multicast available but disabled
 
@@ -261,15 +276,80 @@ OSD mode:    ptz
 4. Default credentials unchanged (admin:admin)
 5. ONVIF services respond even when `onvif_en=0`
 
+## Live-Changeable Streaming Settings
+
+All via `POST http://camera/cgi-bin/param.cgi?post_media_video` with form-encoded body. No reboot needed.
+
+| Parameter | Current | Options | Notes |
+|---|---|---|---|
+| `ndi_mode` | `264P60` | `264P60`, `264P50`, `265P60`, `265P50` | NDI codec/framerate |
+| `protocol_1` | `H264` | `H264`, `H265` | Stream 1 codec |
+| `protocol_2` | `H264` | `H264`, `H265` | Stream 2 codec |
+| `bps_1` | `62000` | any integer (kbps) | Stream 1 bitrate |
+| `bps_2` | `3000` | any integer (kbps) | Stream 2 bitrate |
+| `fps_1` | `60` | `30`, `60` | Stream 1 framerate |
+| `fps_2` | `30` | `30`, `60` | Stream 2 framerate |
+| `gop_1` | `20` | any integer | Stream 1 GOP length |
+| `rcmode_1` | `CBR` | `CBR` (likely `VBR` too) | Rate control mode |
+| `size_1` | `PIC_HD1080` | (not fully tested) | Stream 1 resolution |
+| `size_2` | `PIC_640_360` | (not fully tested) | Stream 2 resolution |
+
+**Note**: RTSP clients may need to reconnect after codec changes. NDI mode is independent from RTSP codec settings.
+
+## AI Tracking
+
+```
+Current mode: Off
+Endpoint:     param.cgi?post_aimode&aimode=<mode>
+Query:        param.cgi?get_aimode
+```
+
+AI tracking is available but should be used sparingly — cameras have been observed locking up/rebooting when tracking is active for extended periods. Likely a thermal or memory issue on the SoC. For production, use manual PTZ with presets.
+
+## Reboot
+
+Requires digest auth:
+```bash
+curl --digest -u admin:admin -X POST -d "cmd=reboot" \
+  "http://camera/cgi-bin/param.cgi?post_reboot"
+```
+Camera returns in ~25 seconds.
+
+## Firmware Updates
+
+Current: `X8.03.15` (model `F2.V`)
+
+Newer firmware available at [prisual.us/pages/downloads](https://www.prisual.us/pages/downloads):
+- `20X_F2.V_V8.03.13_158M_250711_customer.img` — for model F2.V
+- Claims: "support for FULL NDI & NDI HX3" and "NDI 6.1.1"
+- Upgrade tool: Windows v2.9.1 or Mac upgrade tool
+- **Caution**: Version number (`V8.03.13`) appears lower than current (`X8.03.15`). Contact Prisual support before flashing to confirm it's safe and not a downgrade.
+
+## FreeD Protocol
+
+Camera tracking protocol for virtual production / broadcast AR. Streams real-time camera position (pan, tilt, roll, zoom, focus) over IP so graphics engines can sync virtual cameras to physical ones.
+
+```
+freedoutput_en="0"    (disabled)
+freeddestip="192.168.100.99"
+freedctrlport="19147"
+freeddataport="19148"
+```
+
+Not relevant for church streaming, but indicates the maturity of the OEM platform.
+
 ## Undocumented Features
 
 1. **Port 81 = ONVIF** — not documented in Prisual materials, but fully functional with Device/Media/PTZ/Imaging services
-2. **`get_ndi_info`** — NDI license status, discovery settings
+2. **`get_ndi_info`** — NDI license status, discovery settings, Full NDI toggle
 3. **`get_aimode`** — AI tracking support (Off, but present)
 4. **`post_visca`** — CGI endpoint to change VISCA settings remotely
 5. **Sony VISCA port 52381** — secondary VISCA port (Sony protocol variant)
-6. **SRT streaming** — supported but not documented in basic materials
-7. **FreeD tracking output** — disabled but present in config
-8. **GB28181** — Chinese national surveillance standard protocol support
-9. **5G modem support** — `get_5g_setting`, `get_5g_sys` endpoints exist (for cellular models?)
-10. **Full VISCA inquiry set works** — exposure mode, gain, shutter, iris, brightness, white balance all queryable
+6. **H.265 support** — both RTSP and NDI, not mentioned in basic documentation
+7. **SRT streaming** — supported but not documented in basic materials
+8. **FreeD tracking output** — disabled but present in config
+9. **GB28181** — Chinese national surveillance standard protocol support
+10. **5G modem support** — `get_5g_setting`, `get_5g_sys` endpoints exist (for cellular models?)
+11. **Full VISCA inquiry set works** — exposure mode, gain, shutter, iris, brightness, white balance all queryable and settable
+12. **Full NDI toggle** — `Full_NDI` parameter enables SpeedHQ/full NDI output (requires reboot)
+13. **`get_system_conf`** — returns plaintext credentials without authentication
