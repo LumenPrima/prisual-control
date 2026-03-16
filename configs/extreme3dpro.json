@@ -1,0 +1,19 @@
+{
+  "name": "Logitech Extreme 3D Pro",
+  "axes": {
+    "pan":   { "index": 0, "deadzone": 0.10, "expo": 2.5, "inverted": false },
+    "tilt":  { "index": 1, "deadzone": 0.10, "expo": 2.5, "inverted": true },
+    "zoom":  { "index": 2, "deadzone": 0.15, "expo": 2.5, "inverted": false },
+    "focus": { "index": 3, "deadzone": 0,    "expo": 0,   "inverted": false }
+  },
+  "buttons": {
+    "af_hold": 0,
+    "af_latch": 1,
+    "program_override": 2,
+    "fade": 3,
+    "cut": 4,
+    "cycle_preview": 5,
+    "preset_save": 1,
+    "presets": [6, 7, 8, 9, 10, 11]
+  }
+}

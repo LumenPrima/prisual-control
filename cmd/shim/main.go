@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"prisual_control/internal/config"
 	"prisual_control/internal/input"
 	"prisual_control/internal/router"
 	"prisual_control/internal/visca"
@@ -21,47 +22,31 @@ import (
 
 // CLI flags
 var (
-	flagVmix      = flag.String("vmix", "", "vMix host IP (enables auto-discovery and tally)")
-	flagCamera    = flag.String("camera", "", "single camera IP (fallback if no vMix)")
-	flagViscaPort = flag.Int("visca-port", 5678, "VISCA TCP port")
-	flagExpo      = flag.Float64("expo", 2.5, "expo curve for spring-return axes")
-	flagFocusHz    = flag.Int("focus-hz", 10, "focus command send rate (Hz)")
-	flagInvertTilt = flag.Bool("invert-tilt", true, "invert tilt axis (stick forward = tilt down)")
-	flagFocusRange    = flag.Int("focus-range", 300, "focus half-range: full slider sweep = ±N positions from anchor")
-	flagFadeDuration  = flag.Int("fade-ms", 1000, "fade transition duration in milliseconds")
+	flagVmix         = flag.String("vmix", "", "vMix host IP (enables auto-discovery and tally)")
+	flagCamera       = flag.String("camera", "", "single camera IP (fallback if no vMix)")
+	flagViscaPort    = flag.Int("visca-port", 5678, "VISCA TCP port")
+	flagFocusHz      = flag.Int("focus-hz", 10, "focus command send rate (Hz)")
+	flagFocusRange   = flag.Int("focus-range", 300, "focus half-range: full slider sweep = ±N positions from anchor")
+	flagFadeDuration = flag.Int("fade-ms", 1000, "fade transition duration in milliseconds")
+	flagConfig       = flag.String("config", "", "controller config JSON file (default: built-in Extreme 3D Pro)")
+	flagDumpConfig   = flag.Bool("dump-config", false, "print default controller config JSON and exit")
 )
 
-// Constants matching the Python POC
+// Camera constants (these are properties of the Prisual cameras, not the controller)
 const (
 	focusMin = 0x0080
 	focusMax = 0x1180
 	zoomMax  = 0x4000
-
-	// Display ranges for pan/tilt position bars (may need tuning per camera)
-	panPosRange  = 2500 // ±panPosRange for centered bar
-	tiltPosRange = 1200
-
-	stickDeadzone = 0.10
-	twistDeadzone = 0.15
 
 	maxPanSpeed  = 0x18 // 24
 	maxTiltSpeed = 0x14 // 20
 	maxZoomSpeed = 7
 
 	presetSlotOffset = 200
-	presetCount      = 6
 
-	// Button indices (Logitech Extreme 3D Pro)
-	btnTrigger    = 0  // hold for AF, thumb+trigger = latch AF
-	btnThumb      = 1  // preset save modifier
-	btnOverride   = 2  // hold to control program camera
-	btnTransition = 3  // execute active transition (cut/fade)
-	btnCut        = 4  // instant cut to preview
-	btnCyclePreview = 5 // cycle preview to next input
-	btnPresetBase = 6  // buttons 7-12 → camera presets 1-6
-
-	// vMix transition
-	defaultFadeDuration = 1000 // ms
+	// Display ranges for pan/tilt position bars
+	panPosRange  = 2500
+	tiltPosRange = 1200
 
 	focusJitterThreshold = 1
 )
@@ -77,6 +62,7 @@ type tickMsg time.Time
 type model struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
+	cfg       config.ControllerConfig
 	router    *router.CameraRouter
 	tallyCh   chan vmix.TallyUpdate
 	joyCh     chan input.JoystickState // bidirectional for non-blocking send pattern
@@ -142,6 +128,7 @@ func (m *model) addLog(msg string) {
 func initialModel(
 	ctx context.Context,
 	cancel context.CancelFunc,
+	cfg config.ControllerConfig,
 	r *router.CameraRouter,
 	tallyCh chan vmix.TallyUpdate,
 	joyCh chan input.JoystickState,
@@ -154,6 +141,7 @@ func initialModel(
 	return model{
 		ctx:           ctx,
 		cancel:        cancel,
+		cfg:           cfg,
 		router:        r,
 		tallyCh:       tallyCh,
 		joyCh:         joyCh,
@@ -246,19 +234,42 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// btn reads a button state safely, returning false for unmapped buttons (index < 0 or out of range).
+func btn(buttons [12]bool, index int) bool {
+	if index < 0 || index >= len(buttons) {
+		return false
+	}
+	return buttons[index]
+}
+
+// btnEdge returns true on a rising edge (pressed this tick, not last tick).
+func btnEdge(buttons, prev [12]bool, index int) bool {
+	return btn(buttons, index) && !btn(prev, index)
+}
+
+// btnRelease returns true on a falling edge (released this tick).
+func btnRelease(buttons, prev [12]bool, index int) bool {
+	return !btn(buttons, index) && btn(prev, index)
+}
+
 func (m *model) processJoystick() {
 	state := m.latestJoy
 	cam := m.router.ActiveCamera()
-	expo := *flagExpo
+	b := m.cfg.Buttons
+	a := m.cfg.Axes
 
 	// --- Button edge detection ---
 	buttons := state.Buttons
 
-	// --- Focus mode: trigger=hold-for-AF, thumb+trigger=latch AF ---
-	throttle := state.Axes[3]
+	// --- Focus mode: af_hold=hold-for-AF, af_latch=latch modifier ---
+	focusIdx := a.Focus.Index
+	throttle := 0.0
+	if focusIdx >= 0 && focusIdx < len(state.Axes) {
+		throttle = state.Axes[focusIdx]
+	}
 
-	// Trigger pressed
-	if buttons[btnTrigger] && !m.prevButtons[btnTrigger] && cam != nil {
+	// AF hold pressed
+	if btnEdge(buttons, m.prevButtons, b.AFHold) && cam != nil {
 		if m.afLatched {
 			// Unlatching — back to MF
 			pos, err := visca.FocusInquiry(cam)
@@ -277,8 +288,8 @@ func (m *model) processJoystick() {
 		}
 	}
 
-	// Trigger released (normal hold-for-AF)
-	if !buttons[btnTrigger] && m.prevButtons[btnTrigger] && cam != nil && !m.afLatched {
+	// AF hold released (normal hold-for-AF)
+	if btnRelease(buttons, m.prevButtons, b.AFHold) && cam != nil && !m.afLatched {
 		if !m.manualFocus {
 			pos, err := visca.FocusInquiry(cam)
 			visca.SetManualFocus(cam)
@@ -289,31 +300,32 @@ func (m *model) processJoystick() {
 		}
 	}
 
-	// Thumb while in AF = latch (AF stays when trigger released)
-	if !m.manualFocus && !m.afLatched && buttons[btnThumb] && !m.prevButtons[btnThumb] {
+	// AF latch modifier while in AF
+	if !m.manualFocus && !m.afLatched && btnEdge(buttons, m.prevButtons, b.AFLatch) {
 		m.afLatched = true
 		m.addLog("AF latched")
 	}
 
 	// Override button
-	if buttons[btnOverride] != m.prevButtons[btnOverride] {
-		oldTarget := m.router.TargetInput()
-		if m.router.SetOverride(buttons[btnOverride]) {
-			m.router.HandleSwitch(oldTarget)
-			m.lastPan = 0
-			m.lastTilt = 0
-			m.lastZoom = 0
+	if config.BtnMapped(b.ProgramOverride) {
+		if btn(buttons, b.ProgramOverride) != btn(m.prevButtons, b.ProgramOverride) {
+			oldTarget := m.router.TargetInput()
+			if m.router.SetOverride(btn(buttons, b.ProgramOverride)) {
+				m.router.HandleSwitch(oldTarget)
+				m.lastPan = 0
+				m.lastTilt = 0
+				m.lastZoom = 0
+			}
 		}
 	}
 
 	// Preset buttons
-	thumbHeld := buttons[btnThumb]
-	for i := 0; i < presetCount; i++ {
-		btn := btnPresetBase + i
-		if btn < len(buttons) && buttons[btn] && !m.prevButtons[btn] {
+	saveHeld := btn(buttons, b.PresetSave)
+	for i, pBtn := range b.Presets {
+		if config.BtnMapped(pBtn) && btnEdge(buttons, m.prevButtons, pBtn) {
 			if cam != nil {
 				slot := byte(presetSlotOffset + i)
-				if thumbHeld {
+				if saveHeld {
 					visca.PresetSave(cam, slot)
 					m.addLog(fmt.Sprintf("Saved preset %d (slot %d)", i+1, presetSlotOffset+i))
 				} else {
@@ -329,27 +341,23 @@ func (m *model) processJoystick() {
 
 	// --- vMix buttons ---
 	if m.vmixCmd != nil {
-		// Transition (fade to preview)
-		if buttons[btnTransition] && !m.prevButtons[btnTransition] {
+		if config.BtnMapped(b.Fade) && btnEdge(buttons, m.prevButtons, b.Fade) {
 			if err := m.vmixCmd.Fade(*flagFadeDuration); err != nil {
 				m.addLog(fmt.Sprintf("Fade error: %v", err))
 			} else {
 				m.addLog(fmt.Sprintf("Fade %dms", *flagFadeDuration))
 			}
 		}
-		// Cut to preview
-		if buttons[btnCut] && !m.prevButtons[btnCut] {
+		if config.BtnMapped(b.Cut) && btnEdge(buttons, m.prevButtons, b.Cut) {
 			if err := m.vmixCmd.Cut(); err != nil {
 				m.addLog(fmt.Sprintf("Cut error: %v", err))
 			} else {
 				m.addLog("Cut")
 			}
 		}
-		// Cycle preview to next input
-		if buttons[btnCyclePreview] && !m.prevButtons[btnCyclePreview] {
-			numInputs := m.vmixNumInputs
-			if numInputs > 0 {
-				if err := m.vmixCmd.NextPreview(numInputs, m.router.Preview); err != nil {
+		if config.BtnMapped(b.CyclePreview) && btnEdge(buttons, m.prevButtons, b.CyclePreview) {
+			if m.vmixNumInputs > 0 {
+				if err := m.vmixCmd.NextPreview(m.vmixNumInputs, m.router.Preview); err != nil {
 					m.addLog(fmt.Sprintf("Preview cycle error: %v", err))
 				} else {
 					m.addLog("Preview next")
@@ -365,12 +373,17 @@ func (m *model) processJoystick() {
 	}
 
 	// --- Pan/Tilt ---
-	panSpeed := input.AxisToSpeed(state.Axes[0], stickDeadzone, maxPanSpeed, expo)
-	tiltAxis := state.Axes[1]
-	if *flagInvertTilt {
+	panAxis := state.Axes[a.Pan.Index]
+	if a.Pan.Inverted {
+		panAxis = -panAxis
+	}
+	panSpeed := input.AxisToSpeed(panAxis, a.Pan.Deadzone, maxPanSpeed, a.Pan.Expo)
+
+	tiltAxis := state.Axes[a.Tilt.Index]
+	if a.Tilt.Inverted {
 		tiltAxis = -tiltAxis
 	}
-	tiltSpeed := input.AxisToSpeed(tiltAxis, stickDeadzone, maxTiltSpeed, expo)
+	tiltSpeed := input.AxisToSpeed(tiltAxis, a.Tilt.Deadzone, maxTiltSpeed, a.Tilt.Expo)
 	if panSpeed != m.lastPan || tiltSpeed != m.lastTilt {
 		visca.PanTiltVariable(cam, panSpeed, tiltSpeed)
 		m.lastPan = panSpeed
@@ -379,7 +392,11 @@ func (m *model) processJoystick() {
 	}
 
 	// --- Zoom ---
-	zoomSpeed := input.AxisToSpeed(state.Axes[2], twistDeadzone, maxZoomSpeed, expo)
+	zoomAxis := state.Axes[a.Zoom.Index]
+	if a.Zoom.Inverted {
+		zoomAxis = -zoomAxis
+	}
+	zoomSpeed := input.AxisToSpeed(zoomAxis, a.Zoom.Deadzone, maxZoomSpeed, a.Zoom.Expo)
 	if zoomSpeed != m.lastZoom {
 		visca.ZoomVariable(cam, zoomSpeed)
 		m.lastZoom = zoomSpeed
@@ -599,7 +616,11 @@ func (m model) View() string {
 	// --- Axes ---
 	content.WriteString("\n")
 	if m.joyConnected {
-		content.WriteString(headerStyle.Render("AXES") + dimStyle.Render("  "+m.joyName) + "\n")
+		joyLabel := m.joyName
+		if m.cfg.Name != "" && m.cfg.Name != m.joyName {
+			joyLabel = m.joyName + " [" + m.cfg.Name + "]"
+		}
+		content.WriteString(headerStyle.Render("AXES") + dimStyle.Render("  "+joyLabel) + "\n")
 
 		// Pan
 		panBar := centeredBar(int(m.camPanPos), -panPosRange, panPosRange, barWidth)
@@ -726,6 +747,23 @@ func (m model) View() string {
 func main() {
 	flag.Parse()
 
+	// --dump-config: print default config and exit
+	if *flagDumpConfig {
+		fmt.Println(config.DefaultConfig().DumpJSON())
+		return
+	}
+
+	// Load controller config
+	cfg := config.DefaultConfig()
+	if *flagConfig != "" {
+		var err error
+		cfg, err = config.Load(*flagConfig)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("Loaded controller config: %s", cfg.Name)
+	}
+
 	if *flagVmix == "" && *flagCamera == "" {
 		fmt.Fprintln(os.Stderr, "Usage: shim --vmix <host> or shim --camera <ip>")
 		flag.PrintDefaults()
@@ -820,7 +858,7 @@ func main() {
 	go input.PollJoystick(ctx, joyCh)
 
 	// Run bubbletea TUI
-	m := initialModel(ctx, cancel, r, tallyCh, joyCh, *flagVmix, vmixOK, vmixCmd, vmixNumInputs, singleCam)
+	m := initialModel(ctx, cancel, cfg, r, tallyCh, joyCh, *flagVmix, vmixOK, vmixCmd, vmixNumInputs, singleCam)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
