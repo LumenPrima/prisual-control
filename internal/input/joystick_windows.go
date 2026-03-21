@@ -141,13 +141,14 @@ func PollJoystick(ctx context.Context, ch chan JoystickState) {
 		state.Connected = true
 		state.Name = name
 
-		// Map Windows axes to our standard layout:
-		// Axis 0 = X (stick LR), Axis 1 = Y (stick FB)
-		// Axis 2 = R/Rz (twist), Axis 3 = V (throttle/slider)
+		// Expose all 6 Windows axes so config can reference any of them:
+		// 0=X, 1=Y, 2=Z, 3=R, 4=U, 5=V
 		state.Axes[0] = normalizeAxis(info.XPos, caps.XMin, caps.XMax)
 		state.Axes[1] = normalizeAxis(info.YPos, caps.YMin, caps.YMax)
-		state.Axes[2] = normalizeAxis(info.RPos, caps.RMin, caps.RMax)
-		state.Axes[3] = normalizeAxis(info.VPos, caps.VMin, caps.VMax)
+		state.Axes[2] = normalizeAxis(info.ZPos, caps.ZMin, caps.ZMax)
+		state.Axes[3] = normalizeAxis(info.RPos, caps.RMin, caps.RMax)
+		state.Axes[4] = normalizeAxis(info.UPos, caps.UMin, caps.UMax)
+		state.Axes[5] = normalizeAxis(info.VPos, caps.VMin, caps.VMax)
 
 		// Buttons are a bitmask
 		for i := 0; i < 12; i++ {

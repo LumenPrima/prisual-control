@@ -87,6 +87,19 @@ func (c ControllerConfig) DumpJSON() string {
 	return string(data)
 }
 
+// Save writes the config as pretty-printed JSON to the given path.
+func (c ControllerConfig) Save(path string) error {
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return fmt.Errorf("config marshal: %w", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("config save: %w", err)
+	}
+	return nil
+}
+
 // BtnMapped returns true if the button index is valid (>= 0).
 func BtnMapped(index int) bool {
 	return index >= 0

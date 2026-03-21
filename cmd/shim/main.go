@@ -59,10 +59,53 @@ type tickMsg time.Time
 
 // --- Bubbletea model ---
 
+// Mapping mode steps
+const (
+	mapAxisPan = iota
+	mapAxisTilt
+	mapAxisZoom
+	mapAxisFocus
+	mapBtnAFHold
+	mapBtnAFLatch
+	mapBtnProgramOverride
+	mapBtnFade
+	mapBtnCut
+	mapBtnCyclePreview
+	mapBtnPresetSave
+	mapBtnPreset1
+	mapBtnPreset2
+	mapBtnPreset3
+	mapBtnPreset4
+	mapBtnPreset5
+	mapBtnPreset6
+	mapStepCount // sentinel
+)
+
+var mapStepNames = [mapStepCount]string{
+	"Pan (move stick left/right)",
+	"Tilt (move stick forward/back)",
+	"Zoom (twist or secondary axis)",
+	"Focus (move throttle slider)",
+	"AF Hold button (trigger)",
+	"AF Latch button (thumb)",
+	"Program Override button",
+	"Fade button",
+	"Cut button",
+	"Cycle Preview button",
+	"Preset Save modifier button",
+	"Preset 1 button",
+	"Preset 2 button",
+	"Preset 3 button",
+	"Preset 4 button",
+	"Preset 5 button",
+	"Preset 6 button",
+}
+
 type model struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	cfg       config.ControllerConfig
+	cfgPath   string // path used to load config (for saving)
 	router    *router.CameraRouter
 	tallyCh   chan vmix.TallyUpdate
 	joyCh     chan input.JoystickState // bidirectional for non-blocking send pattern
@@ -106,8 +149,20 @@ type model struct {
 	// Button edge detection
 	prevButtons [12]bool
 
+	// After a camera switch, suppress movement until stick returns to center
+	switchMute bool
+
 	// Display
 	logLines []string
+
+	// Mapping mode
+	mapping        bool                  // true when in mapping mode
+	mapStep        int                   // current step (mapAxis* or mapBtn*)
+	mapCfg         config.ControllerConfig // config being built
+	mapBaseAxes    [6]float64            // axis snapshot when step started (for detecting movement)
+	mapBaseButtons [12]bool              // button snapshot when step started
+	mapDetected    int                   // detected axis/button index, -1 if none yet
+	mapSettled     bool                  // true once detection has settled
 }
 
 func (m *model) anchorFocus(centerPos int, throttle float64) {
@@ -129,6 +184,7 @@ func initialModel(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	cfg config.ControllerConfig,
+	cfgPath string,
 	r *router.CameraRouter,
 	tallyCh chan vmix.TallyUpdate,
 	joyCh chan input.JoystickState,
@@ -142,6 +198,7 @@ func initialModel(
 		ctx:           ctx,
 		cancel:        cancel,
 		cfg:           cfg,
+		cfgPath:       cfgPath,
 		router:        r,
 		tallyCh:       tallyCh,
 		joyCh:         joyCh,
@@ -191,14 +248,85 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.KeyMsg:
-		if msg.String() == "q" || msg.String() == "ctrl+c" {
-			// Stop all motion on all cameras
+		key := msg.String()
+
+		if key == "ctrl+c" {
 			for _, cam := range m.router.Cameras {
 				visca.StopAllMotion(cam)
 			}
 			m.cancel()
 			return m, tea.Quit
 		}
+
+		// Mapping mode key handling
+		if m.mapping {
+			switch key {
+			case "esc":
+				m.mapping = false
+				m.addLog("Mapping cancelled")
+			case "enter":
+				if m.mapDetected >= 0 {
+					m.applyMapStep()
+					m.mapStep++
+					if m.mapStep >= mapStepCount {
+						// Done — save config
+						m.cfg = m.mapCfg
+						m.cfg.Name = m.joyName
+						savePath := m.cfgPath
+						if savePath == "" {
+							savePath = "controller.json"
+						}
+						if err := m.cfg.Save(savePath); err != nil {
+							m.addLog(fmt.Sprintf("Save error: %v", err))
+						} else {
+							m.addLog(fmt.Sprintf("Saved to %s", savePath))
+						}
+						m.mapping = false
+					} else {
+						m.startMapStep()
+					}
+				}
+			case "tab":
+				// Skip this mapping step (keep default)
+				m.mapStep++
+				if m.mapStep >= mapStepCount {
+					m.cfg = m.mapCfg
+					m.cfg.Name = m.joyName
+					savePath := m.cfgPath
+					if savePath == "" {
+						savePath = "controller.json"
+					}
+					if err := m.cfg.Save(savePath); err != nil {
+						m.addLog(fmt.Sprintf("Save error: %v", err))
+					} else {
+						m.addLog(fmt.Sprintf("Saved to %s", savePath))
+					}
+					m.mapping = false
+				} else {
+					m.startMapStep()
+				}
+			}
+			return m, nil
+		}
+
+		// Normal mode keys
+		switch key {
+		case "q":
+			for _, cam := range m.router.Cameras {
+				visca.StopAllMotion(cam)
+			}
+			m.cancel()
+			return m, tea.Quit
+		case "m":
+			if m.joyConnected {
+				m.mapping = true
+				m.mapStep = 0
+				m.mapCfg = m.cfg // start from current config
+				m.startMapStep()
+				m.addLog("Entering mapping mode...")
+			}
+		}
+		return m, nil
 
 	case tallyMsg:
 		update := vmix.TallyUpdate(msg)
@@ -208,6 +336,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastPan = 0
 			m.lastTilt = 0
 			m.lastZoom = 0
+			m.switchMute = true
 			m.addLog(fmt.Sprintf("Tally: pgm=%d pvw=%d", update.Program, update.Preview))
 		}
 		return m, listenTally(m.tallyCh)
@@ -223,9 +352,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, listenJoystick(m.joyCh)
 
 	case tickMsg:
-		// Process joystick → VISCA commands on a fixed 10ms tick,
-		// matching the Python POC's main loop cadence.
-		if m.joyReady && m.joyConnected {
+		if m.mapping {
+			// In mapping mode, run detection instead of camera control
+			if m.joyReady && m.joyConnected {
+				m.updateMapDetection()
+			}
+		} else if m.joyReady && m.joyConnected {
+			// Process joystick → VISCA commands on a fixed 10ms tick
 			m.processJoystick()
 		}
 		return m, tickCmd()
@@ -250,6 +383,88 @@ func btnEdge(buttons, prev [12]bool, index int) bool {
 // btnRelease returns true on a falling edge (released this tick).
 func btnRelease(buttons, prev [12]bool, index int) bool {
 	return !btn(buttons, index) && btn(prev, index)
+}
+
+func (m *model) startMapStep() {
+	m.mapDetected = -1
+	m.mapSettled = false
+	if m.joyReady {
+		m.mapBaseAxes = m.latestJoy.Axes
+		m.mapBaseButtons = m.latestJoy.Buttons
+	}
+}
+
+func (m *model) updateMapDetection() {
+	if !m.joyReady {
+		return
+	}
+	state := m.latestJoy
+
+	if m.mapStep < mapBtnAFHold {
+		// Axis detection: find axis with largest absolute movement from baseline
+		bestAxis := -1
+		bestDelta := 0.3 // minimum threshold to detect
+		for i := 0; i < 6; i++ {
+			delta := math.Abs(state.Axes[i] - m.mapBaseAxes[i])
+			if delta > bestDelta {
+				bestDelta = delta
+				bestAxis = i
+			}
+		}
+		if bestAxis >= 0 {
+			m.mapDetected = bestAxis
+			m.mapSettled = true
+		}
+	} else {
+		// Button detection: find first button that's pressed now but wasn't at baseline
+		for i := 0; i < 12; i++ {
+			if state.Buttons[i] && !m.mapBaseButtons[i] {
+				m.mapDetected = i
+				m.mapSettled = true
+				return
+			}
+		}
+	}
+}
+
+func (m *model) applyMapStep() {
+	idx := m.mapDetected
+	switch m.mapStep {
+	case mapAxisPan:
+		m.mapCfg.Axes.Pan.Index = idx
+	case mapAxisTilt:
+		m.mapCfg.Axes.Tilt.Index = idx
+	case mapAxisZoom:
+		m.mapCfg.Axes.Zoom.Index = idx
+	case mapAxisFocus:
+		m.mapCfg.Axes.Focus.Index = idx
+	case mapBtnAFHold:
+		m.mapCfg.Buttons.AFHold = idx
+	case mapBtnAFLatch:
+		m.mapCfg.Buttons.AFLatch = idx
+	case mapBtnProgramOverride:
+		m.mapCfg.Buttons.ProgramOverride = idx
+	case mapBtnFade:
+		m.mapCfg.Buttons.Fade = idx
+	case mapBtnCut:
+		m.mapCfg.Buttons.Cut = idx
+	case mapBtnCyclePreview:
+		m.mapCfg.Buttons.CyclePreview = idx
+	case mapBtnPresetSave:
+		m.mapCfg.Buttons.PresetSave = idx
+	case mapBtnPreset1:
+		m.mapCfg.Buttons.Presets[0] = idx
+	case mapBtnPreset2:
+		m.mapCfg.Buttons.Presets[1] = idx
+	case mapBtnPreset3:
+		m.mapCfg.Buttons.Presets[2] = idx
+	case mapBtnPreset4:
+		m.mapCfg.Buttons.Presets[3] = idx
+	case mapBtnPreset5:
+		m.mapCfg.Buttons.Presets[4] = idx
+	case mapBtnPreset6:
+		m.mapCfg.Buttons.Presets[5] = idx
+	}
 }
 
 func (m *model) processJoystick() {
@@ -315,6 +530,7 @@ func (m *model) processJoystick() {
 				m.lastPan = 0
 				m.lastTilt = 0
 				m.lastZoom = 0
+				m.switchMute = true // suppress until stick returns to center
 			}
 		}
 	}
@@ -384,6 +600,24 @@ func (m *model) processJoystick() {
 		tiltAxis = -tiltAxis
 	}
 	tiltSpeed := input.AxisToSpeed(tiltAxis, a.Tilt.Deadzone, maxTiltSpeed, a.Tilt.Expo)
+
+	zoomAxis := state.Axes[a.Zoom.Index]
+	if a.Zoom.Inverted {
+		zoomAxis = -zoomAxis
+	}
+	zoomSpeed := input.AxisToSpeed(zoomAxis, a.Zoom.Deadzone, maxZoomSpeed, a.Zoom.Expo)
+
+	// After a camera switch, suppress movement until all axes return to center
+	if m.switchMute {
+		if panSpeed == 0 && tiltSpeed == 0 && zoomSpeed == 0 {
+			m.switchMute = false
+		} else {
+			panSpeed = 0
+			tiltSpeed = 0
+			zoomSpeed = 0
+		}
+	}
+
 	if panSpeed != m.lastPan || tiltSpeed != m.lastTilt {
 		visca.PanTiltVariable(cam, panSpeed, tiltSpeed)
 		m.lastPan = panSpeed
@@ -392,11 +626,6 @@ func (m *model) processJoystick() {
 	}
 
 	// --- Zoom ---
-	zoomAxis := state.Axes[a.Zoom.Index]
-	if a.Zoom.Inverted {
-		zoomAxis = -zoomAxis
-	}
-	zoomSpeed := input.AxisToSpeed(zoomAxis, a.Zoom.Deadzone, maxZoomSpeed, a.Zoom.Expo)
 	if zoomSpeed != m.lastZoom {
 		visca.ZoomVariable(cam, zoomSpeed)
 		m.lastZoom = zoomSpeed
@@ -569,7 +798,31 @@ func positionBar(pos, minPos, maxPos, width int) string {
 	return string(bar)
 }
 
+// axisLabel returns a display name for a Windows axis index.
+func axisLabel(idx int) string {
+	switch idx {
+	case 0:
+		return "X"
+	case 1:
+		return "Y"
+	case 2:
+		return "Z"
+	case 3:
+		return "R"
+	case 4:
+		return "U"
+	case 5:
+		return "V"
+	default:
+		return "?"
+	}
+}
+
 func (m model) View() string {
+	if m.mapping {
+		return m.viewMapping()
+	}
+
 	var content strings.Builder
 
 	// --- Header ---
@@ -732,13 +985,124 @@ func (m model) View() string {
 
 	// --- Help ---
 	content.WriteString("\n")
-	helpParts := " q quit  trigger AF  thumb+trigger latch  base 7-12 presets"
+	helpParts := " q quit  m mapping  trigger AF  thumb+trigger latch  base 7-12 presets"
 	if m.vmixCmd != nil {
 		helpParts += "\n btn4 fade  btn5 cut  btn6 next preview"
 	}
 	content.WriteString(dimStyle.Render(helpParts))
 
 	// Wrap in panel
+	return "\n" + panelStyle.Render(content.String()) + "\n"
+}
+
+func (m model) viewMapping() string {
+	var content strings.Builder
+
+	content.WriteString(titleStyle.Render("PRISUAL") + yellow.Render(" Controller Mapping") + "\n")
+	content.WriteString("\n")
+
+	// Progress
+	content.WriteString(dimStyle.Render(fmt.Sprintf("  Step %d/%d", m.mapStep+1, mapStepCount)) + "\n")
+	content.WriteString("\n")
+
+	// Current step prompt
+	stepName := mapStepNames[m.mapStep]
+	if m.mapStep < mapBtnAFHold {
+		content.WriteString(yellow.Bold(true).Render("  Move axis: ") + bold.Render(stepName) + "\n")
+	} else {
+		content.WriteString(yellow.Bold(true).Render("  Press button: ") + bold.Render(stepName) + "\n")
+	}
+	content.WriteString("\n")
+
+	// Show live axis values
+	content.WriteString(headerStyle.Render("  AXES") + "\n")
+	for i := 0; i < 6; i++ {
+		val := 0.0
+		base := 0.0
+		if m.joyReady {
+			val = m.latestJoy.Axes[i]
+			base = m.mapBaseAxes[i]
+		}
+		delta := math.Abs(val - base)
+
+		barVal := int((val + 1.0) / 2.0 * float64(barWidth))
+		if barVal < 0 {
+			barVal = 0
+		}
+		if barVal > barWidth {
+			barVal = barWidth
+		}
+		bar := make([]rune, barWidth)
+		for j := range bar {
+			if j < barVal {
+				bar[j] = '█'
+			} else {
+				bar[j] = '░'
+			}
+		}
+
+		label := fmt.Sprintf("  %s ", axisLabel(i))
+		valStr := fmt.Sprintf(" %+6.3f", val)
+
+		style := dimStyle
+		if m.mapStep < mapBtnAFHold && i == m.mapDetected {
+			style = green
+			label = green.Bold(true).Render(label)
+			valStr = green.Render(valStr)
+		} else if m.mapStep < mapBtnAFHold && delta > 0.1 {
+			style = cyan
+			label = cyan.Render(label)
+			valStr = cyan.Render(valStr)
+		} else {
+			label = dimStyle.Render(label)
+			valStr = dimStyle.Render(valStr)
+		}
+
+		content.WriteString(label + style.Render(string(bar)) + valStr + "\n")
+	}
+
+	// Show live button states
+	content.WriteString("\n")
+	content.WriteString(headerStyle.Render("  BUTTONS") + "\n")
+	content.WriteString("  ")
+	for i := 0; i < 12; i++ {
+		pressed := m.joyReady && m.latestJoy.Buttons[i]
+		label := fmt.Sprintf("%2d", i)
+		if m.mapStep >= mapBtnAFHold && i == m.mapDetected {
+			if pressed {
+				content.WriteString(green.Bold(true).Render("["+label+"]") + " ")
+			} else {
+				content.WriteString(green.Render("["+label+"]") + " ")
+			}
+		} else if pressed {
+			content.WriteString(yellow.Render("["+label+"]") + " ")
+		} else {
+			content.WriteString(dimStyle.Render(" "+label+" ") + " ")
+		}
+	}
+	content.WriteString("\n")
+
+	// Detection status
+	content.WriteString("\n")
+	if m.mapDetected >= 0 {
+		if m.mapStep < mapBtnAFHold {
+			content.WriteString(green.Bold(true).Render(fmt.Sprintf("  Detected: Axis %s (%d)", axisLabel(m.mapDetected), m.mapDetected)))
+		} else {
+			content.WriteString(green.Bold(true).Render(fmt.Sprintf("  Detected: Button %d", m.mapDetected)))
+		}
+		content.WriteString(dimStyle.Render("  — Enter to confirm") + "\n")
+	} else {
+		if m.mapStep < mapBtnAFHold {
+			content.WriteString(dimStyle.Render("  Waiting for axis movement...") + "\n")
+		} else {
+			content.WriteString(dimStyle.Render("  Waiting for button press...") + "\n")
+		}
+	}
+
+	// Help
+	content.WriteString("\n")
+	content.WriteString(dimStyle.Render("  Enter confirm  Tab skip  Esc cancel"))
+
 	return "\n" + panelStyle.Render(content.String()) + "\n"
 }
 
@@ -753,15 +1117,21 @@ func main() {
 		return
 	}
 
-	// Load controller config
+	// Load controller config: explicit flag > controller.json > built-in default
 	cfg := config.DefaultConfig()
-	if *flagConfig != "" {
+	configPath := *flagConfig
+	if configPath == "" {
+		if _, err := os.Stat("controller.json"); err == nil {
+			configPath = "controller.json"
+		}
+	}
+	if configPath != "" {
 		var err error
-		cfg, err = config.Load(*flagConfig)
+		cfg, err = config.Load(configPath)
 		if err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("Loaded controller config: %s", cfg.Name)
+		log.Printf("Loaded controller config: %s (%s)", cfg.Name, configPath)
 	}
 
 	if *flagVmix == "" && *flagCamera == "" {
@@ -858,7 +1228,7 @@ func main() {
 	go input.PollJoystick(ctx, joyCh)
 
 	// Run bubbletea TUI
-	m := initialModel(ctx, cancel, cfg, r, tallyCh, joyCh, *flagVmix, vmixOK, vmixCmd, vmixNumInputs, singleCam)
+	m := initialModel(ctx, cancel, cfg, configPath, r, tallyCh, joyCh, *flagVmix, vmixOK, vmixCmd, vmixNumInputs, singleCam)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)

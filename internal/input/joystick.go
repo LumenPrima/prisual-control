@@ -4,7 +4,7 @@ import "math"
 
 // JoystickState represents the current state of all axes and buttons.
 type JoystickState struct {
-	Axes      [4]float64
+	Axes      [6]float64
 	Buttons   [12]bool
 	Connected bool
 	Name      string
