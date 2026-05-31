@@ -1,10 +1,10 @@
 {
   "name": "Logitech Extreme 3D Pro (Windows)",
   "axes": {
-    "pan":   { "index": 0, "deadzone": 0.10, "expo": 2.5, "inverted": false },
-    "tilt":  { "index": 1, "deadzone": 0.10, "expo": 2.5, "inverted": true },
-    "zoom":  { "index": 3, "deadzone": 0.15, "expo": 2.5, "inverted": false },
-    "focus": { "index": 2, "deadzone": 0, "expo": 0, "inverted": false }
+    "pan":   { "index": 0, "deadzone": 0.10, "expo": 3.5, "inverted": false },
+    "tilt":  { "index": 1, "deadzone": 0.10, "expo": 3.5, "inverted": true },
+    "zoom":  { "index": 3, "deadzone": 0.10, "expo": 3.5, "inverted": false },
+    "focus": { "index": 2, "deadzone": 0.02, "expo": 0, "inverted": false }
   },
   "buttons": {
     "af_hold": 0,

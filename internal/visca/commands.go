@@ -28,20 +28,41 @@ func positionNibbles(pos uint16) (byte, byte, byte, byte) {
 		byte(pos & 0x0F)
 }
 
-// FocusDirect sets absolute focus position.
-func FocusDirect(c *Connection, position uint16) error {
-	p, q, r, s := positionNibbles(position)
-	return c.Send([]byte{0x81, 0x01, 0x04, 0x48, p, q, r, s, 0xFF})
+// FocusStop stops variable-speed manual focus movement.
+func FocusStop(c Sender) error {
+	return c.Send([]byte{0x81, 0x01, 0x04, 0x08, 0x00, 0xFF})
+}
+
+// FocusFar moves focus toward far at variable speed 1-7.
+func FocusFar(c Sender, speed int) error {
+	if speed < 1 {
+		speed = 1
+	}
+	if speed > 7 {
+		speed = 7
+	}
+	return c.Send([]byte{0x81, 0x01, 0x04, 0x08, 0x20 | byte(speed), 0xFF})
+}
+
+// FocusNear moves focus toward near at variable speed 1-7.
+func FocusNear(c Sender, speed int) error {
+	if speed < 1 {
+		speed = 1
+	}
+	if speed > 7 {
+		speed = 7
+	}
+	return c.Send([]byte{0x81, 0x01, 0x04, 0x08, 0x30 | byte(speed), 0xFF})
 }
 
 // ZoomDirect sets absolute zoom position.
-func ZoomDirect(c *Connection, position uint16) error {
+func ZoomDirect(c Sender, position uint16) error {
 	p, q, r, s := positionNibbles(position)
 	return c.Send([]byte{0x81, 0x01, 0x04, 0x47, p, q, r, s, 0xFF})
 }
 
 // ZoomVariable sets variable-speed zoom. speed: -7 to +7 (negative=wide, positive=tele). 0=stop.
-func ZoomVariable(c *Connection, speed int) error {
+func ZoomVariable(c Sender, speed int) error {
 	if speed == 0 {
 		return c.Send([]byte{0x81, 0x01, 0x04, 0x07, 0x00, 0xFF})
 	}
@@ -61,7 +82,7 @@ func ZoomVariable(c *Connection, speed int) error {
 
 // PanTiltVariable sets variable-speed pan/tilt.
 // pan: -24 to +24, tilt: -20 to +20. 0,0 = stop.
-func PanTiltVariable(c *Connection, pan, tilt int) error {
+func PanTiltVariable(c Sender, pan, tilt int) error {
 	if pan == 0 && tilt == 0 {
 		return c.Send([]byte{0x81, 0x01, 0x06, 0x01, 0x01, 0x01, 0x03, 0x03, 0xFF})
 	}
@@ -108,45 +129,59 @@ func PanTiltVariable(c *Connection, pan, tilt int) error {
 }
 
 // PresetSave saves current pan/tilt/zoom/focus to a camera preset slot (0-254).
-func PresetSave(c *Connection, slot byte) error {
+func PresetSave(c Sender, slot byte) error {
 	return c.Send([]byte{0x81, 0x01, 0x04, 0x3F, 0x01, slot, 0xFF})
 }
 
 // PresetRecall recalls a camera preset slot (0-254).
-func PresetRecall(c *Connection, slot byte) error {
+func PresetRecall(c Sender, slot byte) error {
 	return c.Send([]byte{0x81, 0x01, 0x04, 0x3F, 0x02, slot, 0xFF})
 }
 
 // SetManualFocus switches the camera to manual focus mode.
-func SetManualFocus(c *Connection) error {
+func SetManualFocus(c Sender) error {
 	return c.Send([]byte{0x81, 0x01, 0x04, 0x38, 0x03, 0xFF})
 }
 
 // SetAutoFocus switches the camera to auto focus mode.
-func SetAutoFocus(c *Connection) error {
+func SetAutoFocus(c Sender) error {
 	return c.Send([]byte{0x81, 0x01, 0x04, 0x38, 0x02, 0xFF})
 }
 
+// SetAFSensitivityLow sets AF sensitivity to low, which reduces
+// zoom-triggered focus compensation hunting even in manual focus mode.
+func SetAFSensitivityLow(c Sender) error {
+	return c.Send([]byte{0x81, 0x01, 0x04, 0x58, 0x03, 0xFF})
+}
+
+// SetAFSensitivityNormal sets AF sensitivity to normal.
+func SetAFSensitivityNormal(c Sender) error {
+	return c.Send([]byte{0x81, 0x01, 0x04, 0x58, 0x02, 0xFF})
+}
+
 // StopAllMotion stops pan/tilt and zoom.
-func StopAllMotion(c *Connection) error {
+func StopAllMotion(c Sender) error {
 	if err := PanTiltVariable(c, 0, 0); err != nil {
 		return err
 	}
-	return ZoomVariable(c, 0)
+	if err := ZoomVariable(c, 0); err != nil {
+		return err
+	}
+	return FocusStop(c)
 }
 
 // TallyRed turns on the camera's red tally light (program).
-func TallyRed(c *Connection) error {
+func TallyRed(c Sender) error {
 	return c.Send([]byte{0x81, 0x01, 0x7E, 0x01, 0x0A, 0x00, 0x02, 0xFF})
 }
 
 // TallyGreen turns on the camera's green tally light (preview).
-func TallyGreen(c *Connection) error {
+func TallyGreen(c Sender) error {
 	return c.Send([]byte{0x81, 0x01, 0x7E, 0x01, 0x0A, 0x00, 0x03, 0xFF})
 }
 
 // TallyOff turns off the camera's tally light.
-func TallyOff(c *Connection) error {
+func TallyOff(c Sender) error {
 	return c.Send([]byte{0x81, 0x01, 0x7E, 0x01, 0x0A, 0x00, 0x00, 0xFF})
 }
 
@@ -220,4 +255,44 @@ func FocusModeInquiry(c *Connection) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("focus mode inquiry: unrecognized response")
+}
+
+// ShutterDirect sets the absolute shutter position (2-nibble value).
+func ShutterDirect(c Sender, position byte) error {
+	p := (position >> 4) & 0x0F
+	q := position & 0x0F
+	return c.Send([]byte{0x81, 0x01, 0x04, 0x4A, 0x00, 0x00, p, q, 0xFF})
+}
+
+// ShutterInquiry queries the camera's current shutter position.
+func ShutterInquiry(c *Connection) (byte, error) {
+	resp, err := c.SendRecv([]byte{0x81, 0x09, 0x04, 0x4A, 0xFF})
+	if err != nil {
+		return 0, err
+	}
+	pos, ok := parsePosition(resp)
+	if !ok {
+		return 0, fmt.Errorf("shutter inquiry: no position in response")
+	}
+	return byte(pos), nil
+}
+
+// GainDirect sets the absolute gain position (2-nibble value).
+func GainDirect(c Sender, position byte) error {
+	p := (position >> 4) & 0x0F
+	q := position & 0x0F
+	return c.Send([]byte{0x81, 0x01, 0x04, 0x0C, 0x00, 0x00, p, q, 0xFF})
+}
+
+// GainInquiry queries the camera's current gain position.
+func GainInquiry(c *Connection) (byte, error) {
+	resp, err := c.SendRecv([]byte{0x81, 0x09, 0x04, 0x0C, 0xFF})
+	if err != nil {
+		return 0, err
+	}
+	pos, ok := parsePosition(resp)
+	if !ok {
+		return 0, fmt.Errorf("gain inquiry: no position in response")
+	}
+	return byte(pos), nil
 }

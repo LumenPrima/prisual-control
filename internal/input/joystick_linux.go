@@ -135,6 +135,20 @@ func PollJoystick(ctx context.Context, ch chan JoystickState) {
 			continue
 		}
 
+		// Derive hat from axes 4 (LR) and 5 (UD) — Linux exposes POV hat as two axes
+		state.Hat = HatCentered
+		h := state.Axes[4] // -1=left, +1=right
+		v := state.Axes[5] // -1=up, +1=down
+		if v < -0.5 {
+			state.Hat = HatUp
+		} else if v > 0.5 {
+			state.Hat = HatDown
+		} else if h < -0.5 {
+			state.Hat = HatLeft
+		} else if h > 0.5 {
+			state.Hat = HatRight
+		}
+
 		sendLatest(ch, state)
 	}
 }

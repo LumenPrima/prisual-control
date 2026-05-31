@@ -155,6 +155,23 @@ func PollJoystick(ctx context.Context, ch chan JoystickState) {
 			state.Buttons[i] = info.Buttons&(1<<uint(i)) != 0
 		}
 
+		// POV hat: 0xFFFF = centered, otherwise hundredths of degrees
+		state.Hat = HatCentered
+		if info.POV != 0xFFFF && info.POV <= 36000 {
+			switch {
+			case info.POV < 4500:
+				state.Hat = HatUp
+			case info.POV < 13500:
+				state.Hat = HatRight
+			case info.POV < 22500:
+				state.Hat = HatDown
+			case info.POV < 31500:
+				state.Hat = HatLeft
+			default:
+				state.Hat = HatUp // 315–360 wraps to up
+			}
+		}
+
 		sendLatest(ch, state)
 	}
 }

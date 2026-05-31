@@ -19,6 +19,7 @@ go build ./cmd/shim
 ./shim --camera 10.2.2.212                  # single-camera fallback
 ./shim --vmix 10.2.2.195 --focus-range 200  # narrower focus window
 ./shim --vmix 10.2.2.195 --fade-ms 500      # faster fades
+./shim --vmix 10.2.2.195 --streamdeck       # enable Stream Deck
 
 # Cross-compile (no toolchain needed for Linux/Windows)
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o shim.exe ./cmd/shim
@@ -44,12 +45,14 @@ go build -o joyprobe-raw ./cmd/joyprobe-raw # raw /dev/input/js* probe (Linux on
 ┌──────────┐      ┌──────▼──────────────▼──────┐      ┌──────────────┐
 │ Joystick │─────▶│       main loop            │─────▶│ Camera A     │
 │ (native) │      │                            │─────▶│ Camera B     │
-└──────────┘      │  CameraRouter              │─────▶│ Camera C ... │
-                  │  Bubbletea TUI             │      │ (VISCA TCP)  │
-                  └────────────────────────────┘      └──────────────┘
+├──────────┤      │  CameraRouter              │─────▶│ Camera C ... │
+│ Stream   │─────▶│  Bubbletea TUI             │      │ (VISCA TCP)  │
+│ Deck     │◀─────│                            │      └──────────────┘
+│ (usbhid) │      └────────────────────────────┘
+└──────────┘
 ```
 
-**Concurrency**: tally + joystick goroutines send on channels, main goroutine (bubbletea) owns all VISCA connections and vMix commander — no mutexes needed.
+**Concurrency**: tally + joystick + Stream Deck goroutines send on channels, main goroutine (bubbletea) owns all VISCA connections and vMix commander — no mutexes needed. Stream Deck feedback flows back via a separate channel (LCD updates).
 
 ## File Structure
 
@@ -67,6 +70,8 @@ internal/input/joystick_linux.go   # Linux: reads /dev/input/js* directly
 internal/input/joystick_windows.go # Windows: winmm.dll joyGetPosEx syscall
 internal/input/joystick_darwin.go  # macOS: IOKit HID framework via cgo
 internal/input/ioctl_linux.go      # Linux ioctl helper for joystick name
+internal/streamdeck/streamdeck.go  # Stream Deck USB HID input + LCD feedback (pure Go, no CGO)
+internal/streamdeck/font.go        # 5x7 bitmap font renderer for Stream Deck LCD keys
 internal/router/router.go     # Camera routing (preview/program tracking, override)
 ```
 

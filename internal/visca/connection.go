@@ -49,6 +49,10 @@ func (c *Connection) Send(cmd []byte) error {
 }
 
 // SendRecv drains, sends a command, then waits for a response (for inquiries).
+// It reads in a loop until a complete VISCA inquiry reply frame (yX 50 ... FF)
+// is seen, or the overall deadline expires. A single Read is unreliable because
+// TCP can fragment the reply — slower cameras may deliver the header and payload
+// in separate packets, so a fixed sleep-then-read misses part of the frame.
 func (c *Connection) SendRecv(cmd []byte) ([]byte, error) {
 	c.drain()
 	c.conn.SetWriteDeadline(time.Now().Add(500 * time.Millisecond))
@@ -58,16 +62,51 @@ func (c *Connection) SendRecv(cmd []byte) ([]byte, error) {
 		return nil, fmt.Errorf("visca send to %s: %w", c.addr, err)
 	}
 
-	time.Sleep(50 * time.Millisecond)
-
-	c.conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	buf := make([]byte, 1024)
-	n, err := c.conn.Read(buf)
-	c.conn.SetReadDeadline(time.Time{})
-	if err != nil {
-		return nil, fmt.Errorf("visca recv from %s: %w", c.addr, err)
+	deadline := time.Now().Add(2 * time.Second)
+	var buf []byte
+	tmp := make([]byte, 256)
+	for {
+		c.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		n, rerr := c.conn.Read(tmp)
+		if n > 0 {
+			buf = append(buf, tmp[:n]...)
+			if containsInquiryReply(buf) {
+				c.conn.SetReadDeadline(time.Time{})
+				return buf, nil
+			}
+		}
+		if rerr != nil {
+			if ne, ok := rerr.(net.Error); !ok || !ne.Timeout() {
+				c.conn.SetReadDeadline(time.Time{})
+				return buf, fmt.Errorf("visca recv from %s: %w", c.addr, rerr)
+			}
+		}
+		if time.Now().After(deadline) {
+			c.conn.SetReadDeadline(time.Time{})
+			if len(buf) == 0 {
+				return nil, fmt.Errorf("visca recv from %s: timeout", c.addr)
+			}
+			return nil, fmt.Errorf("visca recv from %s: incomplete reply (%d bytes)", c.addr, len(buf))
+		}
 	}
-	return buf[:n], nil
+}
+
+// containsInquiryReply reports whether buf contains a complete VISCA inquiry
+// reply frame: yX 50 <data...> FF. ACK frames (yX 4Y FF) and command
+// completions (yX 5Y FF with Y != 0) are ignored.
+func containsInquiryReply(buf []byte) bool {
+	for i := 0; i+1 < len(buf); i++ {
+		if buf[i]&0xF0 != 0x90 || buf[i+1] != 0x50 {
+			continue
+		}
+		for j := i + 2; j < len(buf); j++ {
+			if buf[j] == 0xFF {
+				return true
+			}
+		}
+		return false
+	}
+	return false
 }
 
 // Close closes the TCP connection.

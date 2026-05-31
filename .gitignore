@@ -1,12 +1,36 @@
 # Binaries (root only, not cmd/ source dirs)
 /shim
 /shim.exe
+/shim-*.exe
 /joyprobe
 /joyprobe-raw
+/joyprobe.exe
+/deckprobe.exe
+/viscaprobe.exe
+
+# Editor backup files
+*~
+
+# Runtime logs / scratch
+*.log
+shim-stderr.log
+shim-stdout.log
+
+# Windows shortcuts
+*.lnk
 
 # Python
 __pycache__/
 *.pyc
+# Python venv used by the tracker
+tracker/.venv/
+
+# Pre-trained model weights (auto-downloaded by ultralytics / boxmot)
+*.pt
+
+# ReID crop dumps
+tracker/crops/
+tracker/runs/
 
 # IDE
 .vscode/

@@ -1,0 +1,9 @@
+@echo off
+echo Starting vMix...
+start "" "C:\Program Files (x86)\vMix\vMix64.exe" "C:\Users\amill\Desktop\MiddNazStreamingYoutube.vmix"
+echo Waiting for vMix to load...
+timeout /t 15 /nobreak >nul
+echo Starting PTZ Shim...
+cd /d C:\Users\amill\prisual-control
+shim.exe --vmix 127.0.0.1 --streamdeck --proclaim 192.168.1.31
+pause

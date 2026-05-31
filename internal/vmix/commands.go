@@ -115,3 +115,18 @@ func (c *Commander) PrevPreview(numInputs, currentPreview int) error {
 	}
 	return c.SetPreview(prev)
 }
+
+// OverlayToggle toggles overlay N with the given input.
+func (c *Commander) OverlayToggle(overlay, input int) error {
+	return c.Send(fmt.Sprintf("FUNCTION OverlayInput%d Input=%d", overlay, input))
+}
+
+// StartStreaming starts the vMix stream output.
+func (c *Commander) StartStreaming() error {
+	return c.Send("FUNCTION StartStreaming")
+}
+
+// StopStreaming stops the vMix stream output.
+func (c *Commander) StopStreaming() error {
+	return c.Send("FUNCTION StopStreaming")
+}

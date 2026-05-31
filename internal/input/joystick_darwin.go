@@ -29,6 +29,9 @@ typedef struct {
     int32_t         axisMin[4];
     int32_t         axisMax[4];
     IOHIDElementRef buttons[12];
+    IOHIDElementRef hatElement;
+    int32_t         hatMin;
+    int32_t         hatMax;
     int             numAxes;
     int             numButtons;
     char            name[256];
@@ -146,6 +149,14 @@ static int joy_init(JoyHandle *h) {
                 }
             }
         }
+        // Hat switch
+        if ((type == kIOHIDElementTypeInput_Misc || type == kIOHIDElementTypeInput_Axis) &&
+            page == kUsagePage_GenericDesktop && usage == kUsage_Hatswitch && h->hatElement == NULL) {
+            h->hatElement = elem;
+            CFRetain(elem);
+            h->hatMin = (int32_t)IOHIDElementGetLogicalMin(elem);
+            h->hatMax = (int32_t)IOHIDElementGetLogicalMax(elem);
+        }
     }
     CFRelease(elements);
 
@@ -153,7 +164,7 @@ static int joy_init(JoyHandle *h) {
     return 0;
 }
 
-static int joy_poll(JoyHandle *h, double outAxes[4], int outButtons[12]) {
+static int joy_poll(JoyHandle *h, double outAxes[4], int outButtons[12], int *outHat) {
     if (!h->connected || !h->device) return -1;
 
     // Pump run loop briefly to get fresh values
@@ -188,6 +199,21 @@ static int joy_poll(JoyHandle *h, double outAxes[4], int outButtons[12]) {
         }
     }
 
+    // Read hat switch: value is typically 0-7 for 8 directions, or outside range = centered
+    *outHat = -1; // centered
+    if (h->hatElement) {
+        IOHIDValueRef valueRef = NULL;
+        IOReturn ret = IOHIDDeviceGetValue(h->device, h->hatElement, &valueRef);
+        if (ret == kIOReturnSuccess && valueRef) {
+            CFIndex raw = IOHIDValueGetIntegerValue(valueRef);
+            if (raw >= h->hatMin && raw <= h->hatMax) {
+                // Normalize: hatMin=0 means 0=up,1=upright,...,7=upleft (8-position)
+                // or hatMin=1 means 1=up,...,8=upleft. Map to 0-based.
+                *outHat = (int)(raw - h->hatMin);
+            }
+        }
+    }
+
     return 0;
 }
 
@@ -199,6 +225,7 @@ static void joy_close(JoyHandle *h) {
         for (int i = 0; i < 12; i++) {
             if (h->buttons[i]) CFRelease(h->buttons[i]);
         }
+        if (h->hatElement) CFRelease(h->hatElement);
         CFRelease(h->device);
         h->device = NULL;
     }
@@ -267,8 +294,9 @@ func PollJoystick(ctx context.Context, ch chan JoystickState) {
 
 		var axes [4]C.double
 		var buttons [12]C.int
+		var hatRaw C.int
 
-		ret := C.joy_poll(&handle, &axes[0], &buttons[0])
+		ret := C.joy_poll(&handle, &axes[0], &buttons[0], &hatRaw)
 		if ret != 0 {
 			C.joy_close(&handle)
 			connected = false
@@ -284,6 +312,19 @@ func PollJoystick(ctx context.Context, ch chan JoystickState) {
 		}
 		for i := 0; i < 12; i++ {
 			state.Buttons[i] = buttons[i] != 0
+		}
+
+		// Map HID hat value (0-7 for 8 directions) to cardinal constants
+		state.Hat = HatCentered
+		switch int(hatRaw) {
+		case 0:
+			state.Hat = HatUp
+		case 2:
+			state.Hat = HatRight
+		case 4:
+			state.Hat = HatDown
+		case 6:
+			state.Hat = HatLeft
 		}
 
 		sendLatest(ch, state)

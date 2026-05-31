@@ -7,11 +7,11 @@ import (
 // CameraRouter manages which camera the joystick controls based on
 // vMix tally state and override button.
 type CameraRouter struct {
-	Cameras   map[int]*visca.Connection // input number -> connection
-	CameraIPs map[int]string            // input number -> IP
-	Program   int                       // current program input (1-based, 0=none)
-	Preview   int                       // current preview input (1-based, 0=none)
-	Override  bool                      // override button held (control program camera)
+	Cameras   map[int]*visca.Camera // input number -> camera worker
+	CameraIPs map[int]string        // input number -> IP
+	Program   int                   // current program input (1-based, 0=none)
+	Preview   int                   // current preview input (1-based, 0=none)
+	Override  bool                  // override button held (control program camera)
 }
 
 // TargetInput returns the input number that the joystick should control.
@@ -26,9 +26,9 @@ func (r *CameraRouter) TargetInput() int {
 	return 0
 }
 
-// ActiveCamera returns the VISCA connection for the currently targeted input.
+// ActiveCamera returns the camera worker for the currently targeted input.
 // Returns nil if no camera is targeted or the input has no connection.
-func (r *CameraRouter) ActiveCamera() *visca.Connection {
+func (r *CameraRouter) ActiveCamera() *visca.Camera {
 	target := r.TargetInput()
 	if target == 0 {
 		return nil

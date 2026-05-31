@@ -2,10 +2,20 @@ package input
 
 import "math"
 
+// Hat direction constants.
+const (
+	HatCentered = -1
+	HatUp       = 0
+	HatRight    = 1
+	HatDown     = 2
+	HatLeft     = 3
+)
+
 // JoystickState represents the current state of all axes and buttons.
 type JoystickState struct {
 	Axes      [6]float64
 	Buttons   [12]bool
+	Hat       int // HatCentered, HatUp, HatRight, HatDown, HatLeft
 	Connected bool
 	Name      string
 }
@@ -27,13 +37,6 @@ func AxisToSpeed(value, deadzone float64, maxSpeed int, expo float64) int {
 		speed = 1
 	}
 	return int(sign) * speed
-}
-
-// ThrottleToFocus maps a throttle axis value (-1.0 to 1.0) to an absolute focus position.
-// Inverted: forward (negative) = far focus, back (positive) = near focus.
-func ThrottleToFocus(value float64, focusMin, focusMax uint16) uint16 {
-	normalized := (-value + 1.0) / 2.0
-	return focusMin + uint16(normalized*float64(focusMax-focusMin))
 }
 
 // sendLatest does a non-blocking send, draining any stale value first.

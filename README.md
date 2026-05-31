@@ -54,8 +54,7 @@ Any USB joystick or gamepad can be used. The shim uses a JSON config file to map
      "axes": {
        "pan":   { "index": 0, "deadzone": 0.10, "expo": 2.5, "inverted": false },
        "tilt":  { "index": 1, "deadzone": 0.10, "expo": 2.5, "inverted": true },
-       "zoom":  { "index": 2, "deadzone": 0.15, "expo": 2.5, "inverted": false },
-       "focus": { "index": 3, "deadzone": 0,    "expo": 0,   "inverted": false }
+       "zoom":  { "index": 2, "deadzone": 0.15, "expo": 2.5, "inverted": false }
      },
      "buttons": {
        "af_hold": 0, "af_latch": 1, "program_override": 2,
@@ -78,7 +77,7 @@ Set any button to `-1` to leave it unmapped. Example configs included for the Ex
 |---|---|
 | Stick X/Y | Pan/Tilt speed (expo curve, spring-return) |
 | Twist | Zoom speed (spring-return) |
-| Throttle slider | Fine focus adjustment (anchor-relative, ±300 positions) |
+| Stream Deck FOCUS FAR / FOCUS NEAR | Manual focus jog while held |
 | Trigger (hold) | Auto-focus while held |
 | Thumb + Trigger | Latch auto-focus (stays on after trigger release) |
 | Top-left (hold) | Override: control program camera instead of preview |
@@ -87,19 +86,16 @@ Set any button to `-1` to leave it unmapped. Example configs included for the Ex
 
 ### Focus System
 
-The throttle/slider uses **anchor-relative** control for fine focus:
+Manual focus is currently Stream Deck driven:
 
-- **Presets and AF set the anchor** — wherever the slider is at that moment becomes "zero"
-- **Moving the slider adjusts focus** relative to the anchor (±300 positions by default)
-- **~2.3 focus positions per step** — enough for critical focus work
-- **No centering needed** — the slider doesn't need to be at any particular position
-
-Re-anchoring happens automatically on preset recall, AF release, and startup.
+- **FOCUS FAR / FOCUS NEAR**: hold to jog focus, release to stop
+- Focus jog switches the camera to manual focus and cancels latched AF
+- The joystick throttle is intentionally ignored for now
 
 ### Auto-Focus Modes
 
-- **Hold-for-AF**: Hold trigger → AF active. Release → back to manual, focus anchored where AF settled.
-- **Latched AF**: While holding trigger, press thumb → AF stays on after trigger release. Unlatch by pressing trigger again or moving the slider.
+- **Hold-for-AF**: Hold trigger → AF active. Release → back to manual.
+- **Latched AF**: While holding trigger, press thumb → AF stays on after trigger release. Unlatch by pressing trigger again or using manual focus jog.
 
 ## TUI
 
@@ -118,7 +114,7 @@ Re-anchoring happens automatically on preset recall, AF release, and startup.
 │   Zoom ████████████░░░░░░░░░░░░░░░░░░  0x1234                │
 │                                                              │
 │ FOCUS                                                        │
-│        ──────────────┼─◆────────────  0x0830 ±300            │
+│        ──────────────────────────────  MANUAL deck hold      │
 │                                                              │
 │  ● vMix 10.2.2.195  cmds 1247                               │
 │                                                              │
@@ -138,8 +134,6 @@ Re-anchoring happens automatically on preset recall, AF release, and startup.
 | `--config` | | Controller config JSON file (default: built-in Extreme 3D Pro) |
 | `--dump-config` | | Print default controller config JSON and exit |
 | `--visca-port` | 5678 | VISCA TCP port |
-| `--focus-hz` | 10 | Focus command send rate |
-| `--focus-range` | 300 | Focus half-range (full slider = ±N positions) |
 | `--fade-ms` | 1000 | Fade transition duration in milliseconds |
 
 ## Building
