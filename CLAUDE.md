@@ -166,6 +166,6 @@ VISCA connections drain pending responses before each send (fire-and-forget). In
 
 ## Reference Documents
 
-- `HTTPCGIList.pdf` — Official Prisual HTTP-CGI control sheet
-- `Visca_Command_V2.1.pdf` — Full VISCA command set
-- `Prisual_4K_and_1080P_series_camera_visca_commands_new(Visca-control command).csv` — VISCA command spreadsheet with test results
+- `docs/HTTPCGIList.pdf` — Official Prisual HTTP-CGI control sheet
+- `docs/Visca_Command_V2.1.pdf` — Full VISCA command set
+- `docs/Prisual_4K_and_1080P_series_camera_visca_commands_new(Visca-control command).csv` — VISCA command spreadsheet with test results
