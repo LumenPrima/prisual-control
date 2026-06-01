@@ -336,7 +336,7 @@ freedctrlport="19147"
 freeddataport="19148"
 ```
 
-Not relevant for church streaming, but indicates the maturity of the OEM platform.
+Not relevant for live streaming, but indicates the maturity of the OEM platform.
 
 ## Undocumented Features
 

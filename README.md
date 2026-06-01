@@ -1,6 +1,6 @@
 # Prisual Control
 
-Multi-camera PTZ control shim for church live streaming. Maps any USB joystick/gamepad to Prisual TEN-20N Pro PTZ cameras via VISCA, with vMix integration for switching, tally, and camera discovery.
+Multi-camera PTZ control shim for live streaming and video production. Maps any USB joystick/gamepad to Prisual TEN-20N Pro PTZ cameras via VISCA, with vMix integration for switching, tally, and camera discovery.
 
 ## Why
 

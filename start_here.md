@@ -2,7 +2,7 @@
 
 ## Goal
 
-Map a **PreSonus ATOM Pad** (MIDI note velocity, 0–127) to **absolute focus position** on **Prisual TEN-20N Pro** NDI HX3 PTZ cameras, for use in a church live streaming production controlled via **vMix**.
+Map a **PreSonus ATOM Pad** (MIDI note velocity, 0–127) to **absolute focus position** on **Prisual TEN-20N Pro** NDI HX3 PTZ cameras, for use in a live streaming production controlled via **vMix**.
 
 ## What We've Established
 

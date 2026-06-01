@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-camera PTZ shim in Go: maps a Logitech Extreme 3D Pro joystick to Prisual TEN-20N Pro NDI HX3 PTZ cameras via VISCA over IP, with vMix integration for tally, transitions, and camera discovery. Used in a church live streaming setup.
+Multi-camera PTZ shim in Go: maps a Logitech Extreme 3D Pro joystick to Prisual TEN-20N Pro NDI HX3 PTZ cameras via VISCA over IP, with vMix integration for tally, transitions, and camera discovery. Built for live streaming and video production.
 
 vMix only supports jog-style focus commands (near/far/stop) — no absolute positioning. This project bypasses vMix to talk directly to the cameras via VISCA TCP.
 
