@@ -67,8 +67,7 @@ internal/proclaim/*       # Proclaim slide control
 - `CLAUDE.md` — full VISCA command table, hardware specs, camera capabilities
 - `STREAMDECK.md` — Stream Deck XL button layout reference
 - `docs/camera_capabilities.md` — camera feature probe results
-- `start_here.md` — original investigation narrative (archived)
-- Python POCs (`poc_*.py`) — legacy, superseded by the Go shim. Do not edit.
+- `probe_pygame.py` — Python axis-resolution probe; superseded by the Go shim.
 
 ## Oh-My-OpenCode skillset
 

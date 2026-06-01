@@ -178,11 +178,6 @@ go build -o joyprobe ./cmd/joyprobe && ./joyprobe
 go build -o joyprobe-raw ./cmd/joyprobe-raw && ./joyprobe-raw
 ```
 
-## Python POCs
+## Python Probes
 
-The `poc_*.py` files are standalone proof-of-concept scripts used during initial development:
-- `poc_joystick_focus.py` — Single-camera joystick control via pygame
-- `poc_atom_focus.py` — ATOM MIDI knob to focus/zoom
-- `probe_pygame.py` — Axis resolution measurement
-
-These require `pygame`, `mido`, and `python-rtmidi`. The Go shim supersedes them.
+- `probe_pygame.py` — axis-resolution measurement (requires `pygame`)
