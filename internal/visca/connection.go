@@ -62,11 +62,11 @@ func (c *Connection) SendRecv(cmd []byte) ([]byte, error) {
 		return nil, fmt.Errorf("visca send to %s: %w", c.addr, err)
 	}
 
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(50 * time.Millisecond)
 	var buf []byte
 	tmp := make([]byte, 256)
 	for {
-		c.conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+		c.conn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
 		n, rerr := c.conn.Read(tmp)
 		if n > 0 {
 			buf = append(buf, tmp[:n]...)
