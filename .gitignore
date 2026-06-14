@@ -7,6 +7,8 @@
 /joyprobe.exe
 /deckprobe.exe
 /viscaprobe.exe
+/viscacal.exe
+/polltest.exe
 
 # Editor backup files
 *~

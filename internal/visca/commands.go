@@ -135,6 +135,27 @@ func PanTiltVariable(c Sender, pan, tilt int) error {
 	return c.Send([]byte{0x81, 0x01, 0x06, 0x01, vv, ww, panDir, tiltDir, 0xFF})
 }
 
+// PanTiltAbsolute moves to an absolute pan/tilt position at the given drive
+// speeds (panSpeed 1-24, tiltSpeed 1-20). pan/tilt are signed encoder positions
+// (pan ±0x0990, tilt +0x0510/-0x01AF on the Prisual). Confirmed OK over network.
+// Unlike PanTiltVariable (a velocity jog), this drives to a target and stops.
+func PanTiltAbsolute(c Sender, pan, tilt int16, panSpeed, tiltSpeed int) error {
+	if panSpeed < 1 {
+		panSpeed = 1
+	} else if panSpeed > 0x18 {
+		panSpeed = 0x18
+	}
+	if tiltSpeed < 1 {
+		tiltSpeed = 1
+	} else if tiltSpeed > 0x14 {
+		tiltSpeed = 0x14
+	}
+	p3, p2, p1, p0 := positionNibbles(uint16(pan))
+	t3, t2, t1, t0 := positionNibbles(uint16(tilt))
+	return c.Send([]byte{0x81, 0x01, 0x06, 0x02, byte(panSpeed), byte(tiltSpeed),
+		p3, p2, p1, p0, t3, t2, t1, t0, 0xFF})
+}
+
 // PresetSave saves current pan/tilt/zoom/focus to a camera preset slot (0-254).
 func PresetSave(c Sender, slot byte) error {
 	return c.Send([]byte{0x81, 0x01, 0x04, 0x3F, 0x01, slot, 0xFF})

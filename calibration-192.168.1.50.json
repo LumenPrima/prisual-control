@@ -1,0 +1,366 @@
+{
+  "camera": "192.168.1.50",
+  "measured_at": "2026-06-14T13:55:15-04:00",
+  "dwell_ms": 1000,
+  "sample_ms": 80,
+  "ranges": {
+    "pan": [
+      -2448,
+      2448
+    ],
+    "tilt": [
+      -431,
+      1296
+    ],
+    "zoom": [
+      0,
+      16384
+    ]
+  },
+  "pan": {
+    "axis": "pan",
+    "samples": [
+      {
+        "speed": 1,
+        "steps_per_sec": 31.64330091713884,
+        "n_samples": 10
+      },
+      {
+        "speed": 2,
+        "steps_per_sec": 42.39915878958099,
+        "n_samples": 7
+      },
+      {
+        "speed": 3,
+        "steps_per_sec": 61.06043016827566,
+        "n_samples": 9
+      },
+      {
+        "speed": 4,
+        "steps_per_sec": 83.54766421160957,
+        "n_samples": 8
+      },
+      {
+        "speed": 5,
+        "steps_per_sec": 111.28161879819537,
+        "n_samples": 7
+      },
+      {
+        "speed": 6,
+        "steps_per_sec": 145.16722815680959,
+        "n_samples": 7
+      },
+      {
+        "speed": 7,
+        "steps_per_sec": 172.6574893034249,
+        "n_samples": 7
+      },
+      {
+        "speed": 8,
+        "steps_per_sec": 209.49265921242807,
+        "n_samples": 7
+      },
+      {
+        "speed": 9,
+        "steps_per_sec": 258.43058937942226,
+        "n_samples": 11
+      },
+      {
+        "speed": 10,
+        "steps_per_sec": 302.764045822971,
+        "n_samples": 11
+      },
+      {
+        "speed": 11,
+        "steps_per_sec": 343.8972675343873,
+        "n_samples": 9
+      },
+      {
+        "speed": 12,
+        "steps_per_sec": 402.56739372499106,
+        "n_samples": 11
+      },
+      {
+        "speed": 13,
+        "steps_per_sec": 445.76517488395723,
+        "n_samples": 9
+      },
+      {
+        "speed": 14,
+        "steps_per_sec": 554.5932931762798,
+        "n_samples": 9
+      },
+      {
+        "speed": 15,
+        "steps_per_sec": 573.9511021289825,
+        "n_samples": 11
+      },
+      {
+        "speed": 16,
+        "steps_per_sec": 639.6281498369897,
+        "n_samples": 11
+      },
+      {
+        "speed": 17,
+        "steps_per_sec": 657.177042432628,
+        "n_samples": 9
+      },
+      {
+        "speed": 18,
+        "steps_per_sec": 760.4664740393207,
+        "n_samples": 9
+      },
+      {
+        "speed": 19,
+        "steps_per_sec": 825.6830524131442,
+        "n_samples": 10
+      },
+      {
+        "speed": 20,
+        "steps_per_sec": 921.7070429964781,
+        "n_samples": 11
+      },
+      {
+        "speed": 21,
+        "steps_per_sec": 979.4745323156682,
+        "n_samples": 11
+      },
+      {
+        "speed": 22,
+        "steps_per_sec": 967.9304349874434,
+        "n_samples": 9
+      },
+      {
+        "speed": 23,
+        "steps_per_sec": 1098.1104880409675,
+        "n_samples": 11
+      },
+      {
+        "speed": 24,
+        "steps_per_sec": 1065.1012844153793,
+        "n_samples": 10
+      }
+    ],
+    "model": {
+      "intercept": -137.21393897106745,
+      "slope_per_speed": 49.82543817664031,
+      "r2": 0.9767799321706162
+    }
+  },
+  "tilt": {
+    "axis": "tilt",
+    "samples": [
+      {
+        "speed": 1,
+        "steps_per_sec": 31.992031143076247,
+        "n_samples": 8
+      },
+      {
+        "speed": 2,
+        "steps_per_sec": 43.316768250144165,
+        "n_samples": 10
+      },
+      {
+        "speed": 3,
+        "steps_per_sec": 60.22013602366869,
+        "n_samples": 11
+      },
+      {
+        "speed": 4,
+        "steps_per_sec": 83.07753879324149,
+        "n_samples": 11
+      },
+      {
+        "speed": 5,
+        "steps_per_sec": 109.83611833923591,
+        "n_samples": 11
+      },
+      {
+        "speed": 6,
+        "steps_per_sec": 138.00566932657063,
+        "n_samples": 11
+      },
+      {
+        "speed": 7,
+        "steps_per_sec": 165.037507696613,
+        "n_samples": 10
+      },
+      {
+        "speed": 8,
+        "steps_per_sec": 196.14287205311268,
+        "n_samples": 11
+      },
+      {
+        "speed": 9,
+        "steps_per_sec": 217.00025412475128,
+        "n_samples": 10
+      },
+      {
+        "speed": 10,
+        "steps_per_sec": 246.42833994534183,
+        "n_samples": 9
+      },
+      {
+        "speed": 11,
+        "steps_per_sec": 275.20208769898125,
+        "n_samples": 11
+      },
+      {
+        "speed": 12,
+        "steps_per_sec": 258.27820875254787,
+        "n_samples": 9
+      },
+      {
+        "speed": 13,
+        "steps_per_sec": 328.9325604450046,
+        "n_samples": 11
+      },
+      {
+        "speed": 14,
+        "steps_per_sec": 356.45701507248714,
+        "n_samples": 11
+      },
+      {
+        "speed": 15,
+        "steps_per_sec": 427.06798913075824,
+        "n_samples": 9
+      },
+      {
+        "speed": 16,
+        "steps_per_sec": 418.80932287749846,
+        "n_samples": 11
+      },
+      {
+        "speed": 17,
+        "steps_per_sec": 457.2575236780289,
+        "n_samples": 11
+      },
+      {
+        "speed": 18,
+        "steps_per_sec": 0,
+        "n_samples": 0,
+        "aborted": true
+      },
+      {
+        "speed": 19,
+        "steps_per_sec": 525.7269891216564,
+        "n_samples": 11
+      },
+      {
+        "speed": 20,
+        "steps_per_sec": 476.7474634749873,
+        "n_samples": 9
+      }
+    ],
+    "model": {
+      "intercept": -18.21038773680577,
+      "slope_per_speed": 26.88298834868237,
+      "r2": 0.9820114538546496
+    }
+  },
+  "zoom_tele": {
+    "axis": "zoom_tele",
+    "samples": [
+      {
+        "speed": 1,
+        "steps_per_sec": 1282.0456905603364,
+        "n_samples": 10
+      },
+      {
+        "speed": 2,
+        "steps_per_sec": 1590.7001688565877,
+        "n_samples": 11
+      },
+      {
+        "speed": 3,
+        "steps_per_sec": 1954.9126552029638,
+        "n_samples": 10
+      },
+      {
+        "speed": 4,
+        "steps_per_sec": 2314.2194233677064,
+        "n_samples": 9
+      },
+      {
+        "speed": 5,
+        "steps_per_sec": 3142.647127271348,
+        "n_samples": 9
+      },
+      {
+        "speed": 6,
+        "steps_per_sec": 3925.5174973591866,
+        "n_samples": 11
+      },
+      {
+        "speed": 7,
+        "steps_per_sec": 4953.750685319574,
+        "n_samples": 11
+      }
+    ],
+    "model": {
+      "intercept": 327.32987636948695,
+      "slope_per_speed": 602.5887183339747,
+      "r2": 0.9491024987690924
+    }
+  },
+  "zoom_wide": {
+    "axis": "zoom_wide",
+    "samples": [
+      {
+        "speed": 1,
+        "steps_per_sec": 795.2834658685117,
+        "n_samples": 9
+      },
+      {
+        "speed": 2,
+        "steps_per_sec": 947.058985648389,
+        "n_samples": 9
+      },
+      {
+        "speed": 3,
+        "steps_per_sec": 1067.736819614492,
+        "n_samples": 9
+      },
+      {
+        "speed": 4,
+        "steps_per_sec": 1368.7567295092547,
+        "n_samples": 11
+      },
+      {
+        "speed": 5,
+        "steps_per_sec": 1757.0935954057077,
+        "n_samples": 11
+      },
+      {
+        "speed": 6,
+        "steps_per_sec": 2232.8811633283353,
+        "n_samples": 9
+      },
+      {
+        "speed": 7,
+        "steps_per_sec": 2943.694058616895,
+        "n_samples": 11
+      }
+    ],
+    "model": {
+      "intercept": 200.89598694218824,
+      "slope_per_speed": 346.65117533558094,
+      "r2": 0.9242817713531091
+    }
+  },
+  "latency": {
+    "reps_ms": [
+      124.938,
+      102.515,
+      126.833,
+      104.248,
+      122.136,
+      103.566,
+      105.096,
+      102.008
+    ],
+    "min_ms": 102.008,
+    "median_ms": 104.672,
+    "note": "upper bound; granularity = inquiry round-trip"
+  }
+}
