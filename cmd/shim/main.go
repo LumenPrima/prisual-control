@@ -39,6 +39,11 @@ var (
 	flagTrackerKd    = flag.Float64("tracker-kd", 1.5, "derivative gain (damps overshoot from control-loop lag); 0 disables")
 	flagTrackerDead  = flag.Float64("tracker-deadband", 0.08, "normalized error magnitude below which auto-track stops (gives center a 'sticky' zone)")
 	flagTrackerStale = flag.Int("tracker-stale-ms", 500, "auto-track stops if no fresh error within this many milliseconds")
+	flagFocusStep    = flag.Int("focus-step", 1, "FocusDirect step (focus positions) per FOCUS button tap; 1 = finest")
+	flagFocusHoldMs  = flag.Int("focus-hold-ms", 500, "hold a FOCUS button this long (ms) before a continuous speed-1 jog begins")
+	// PWM jog knobs — currently bypassed (see processFocusPulse), kept for re-enable.
+	flagFocusOnMs  = flag.Int("focus-pulse-on-ms", 40, "PWM jog ON window in ms (bypassed; speed-1 jog runs this long per pulse)")
+	flagFocusOffMs = flag.Int("focus-pulse-off-ms", 60, "PWM jog OFF window in ms; 0 = continuous (bypassed)")
 )
 
 // Camera constants (these are properties of the Prisual cameras, not the controller)
@@ -48,7 +53,12 @@ const (
 	maxPanSpeed  = 0x18 // 24
 	maxTiltSpeed = 0x14 // 20
 	maxZoomSpeed = 7
-	maxFocusSpeed = 4
+	// VISCA variable focus jog speed (1-7). Speed 1 (slowest) is used for the
+	// hold-to-jog phase; fine adjustment is done by FocusDirect taps instead.
+	maxFocusSpeed = 1
+	// Usable focus position range (probed): FocusDirect taps clamp to this.
+	focusPosMin = 0x0080
+	focusPosMax = 0x1180
 
 	presetSlotOffset = 200
 
@@ -61,6 +71,19 @@ const (
 	shutterMax = 0x15 // 21 positions
 	gainMin    = 0x00
 	gainMax    = 0x0F // 16 positions
+)
+
+// Focus control tuning, set from flags in main().
+//   - focusStep / focusHoldMs drive the active model: a FocusDirect step per
+//     tap, escalating to a continuous speed-1 jog after a hold.
+//   - focusPulseOnMs / focusPulseOffMs feed the PWM jog (processFocusPulse),
+//     currently bypassed but retained for possible re-enable.
+var (
+	focusStep   = 1
+	focusHoldMs = 500
+
+	focusPulseOnMs  = 40
+	focusPulseOffMs = 60
 )
 
 // --- Bubbletea messages ---
@@ -79,6 +102,10 @@ type (
 	queryShutter   struct{}
 	queryGain      struct{}
 	queryFocusMode struct{}
+	// queryFocusStep carries a one-shot focus inquiry whose reply triggers a
+	// FocusDirect nudge of `dir` * focusStep positions, where dir is the
+	// position-value polarity (+1 toward far, -1 toward near on this camera).
+	queryFocusStep struct{ dir int }
 )
 
 // --- Bubbletea model ---
@@ -166,6 +193,13 @@ type model struct {
 	manualFocus  bool
 	afLatched    bool // true when AF is latched (thumb+trigger)
 	lastFocusJog int  // -1=far, 0=stopped, +1=near
+	// Focus step+hold: a FOCUS button tap does one FocusDirect step; holding
+	// past focusHoldMs escalates to a continuous speed-1 jog.
+	focusPressAt time.Time // when the held FOCUS button was pressed
+	focusHeldJog bool      // true once the hold escalated to a continuous jog
+	// Focus jog PWM (bypassed; see processFocusPulse). Retained for re-enable.
+	focusPulseOn bool      // true during the ON (moving) phase of the pulse
+	focusPulseAt time.Time // when the current ON/OFF phase began
 	cmdCount     int
 
 	// Zoom-AF: auto-switch to AF while zooming, restore MF after
@@ -569,6 +603,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			// Auto-track drives every enabled cam, independent of joystick.
 			m.processAutoTrack()
+			// Focus hold-to-jog is deck-driven, so it runs regardless of joystick.
+			m.processFocusHold()
 			if m.joyReady && m.joyConnected {
 				m.processJoystick()
 			}
@@ -601,7 +637,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleViscaReply dispatches an inquiry response by Tag type and updates
 // cached camera state used by the TUI.
 func (m *model) handleViscaReply(r visca.Reply) {
-	switch r.Tag.(type) {
+	switch t := r.Tag.(type) {
+	case queryFocusStep:
+		// One-shot: a FOCUS tap queried the position; nudge by one step. Skip
+		// if the hold already escalated to a jog (don't fight it) or the cam
+		// switched out from under the in-flight inquiry.
+		if r.Err == nil && !m.focusHeldJog && m.activeCamAddrIs(r.CamAddr) {
+			pos := int(r.Result.(uint16))
+			pos += t.dir * focusStep
+			if pos < focusPosMin {
+				pos = focusPosMin
+			} else if pos > focusPosMax {
+				pos = focusPosMax
+			}
+			if cam := m.router.ActiveCamera(); cam != nil {
+				visca.FocusDirect(cam, uint16(pos))
+				m.cmdCount++
+			}
+		}
+
 	case queryPanTilt:
 		if r.Err == nil && m.activeCamAddrIs(r.CamAddr) {
 			pt := r.Result.(visca.PanTiltResult)
@@ -909,21 +963,25 @@ func (m *model) handleDeckPress(button int) {
 	case deck.ActionFocusFar:
 		if cam != nil {
 			visca.SetManualFocus(cam)
-			visca.FocusFar(cam, maxFocusSpeed)
 			m.manualFocus = true
 			m.afLatched = false
 			m.lastFocusJog = -1
-			m.addLog("Deck: focus far")
+			m.focusPressAt = time.Now()
+			m.focusHeldJog = false
+			m.startFocusStep(1) // FocusDirect position increases toward far on this camera
+			m.addLog("Deck: focus far (step)")
 			m.cmdCount++
 		}
 	case deck.ActionFocusNear:
 		if cam != nil {
 			visca.SetManualFocus(cam)
-			visca.FocusNear(cam, maxFocusSpeed)
 			m.manualFocus = true
 			m.afLatched = false
 			m.lastFocusJog = 1
-			m.addLog("Deck: focus near")
+			m.focusPressAt = time.Now()
+			m.focusHeldJog = false
+			m.startFocusStep(-1) // FocusDirect position decreases toward near on this camera
+			m.addLog("Deck: focus near (step)")
 			m.cmdCount++
 		}
 	case deck.ActionPTZHome:
@@ -1021,6 +1079,8 @@ func (m *model) handleDeckRelease(button int) {
 	case deck.ActionFocusFar, deck.ActionFocusNear:
 		visca.FocusStop(cam)
 		m.lastFocusJog = 0
+		m.focusHeldJog = false
+		m.focusPulseOn = false
 	case deck.ActionAFToggle:
 		// Release — back to MF.
 		visca.SetManualFocus(cam)
@@ -1279,6 +1339,75 @@ func (m *model) processAutoTrack() {
 				delete(m.activePresets, num)
 			}
 		}
+	}
+}
+
+// startFocusStep fires one FocusDirect nudge: it queries the current focus
+// position, and handleViscaReply applies dir*focusStep (dir: -1 far, +1 near)
+// when the reply lands. Called on a FOCUS button press, which also arms the
+// hold-to-jog timer (focusPressAt).
+func (m *model) startFocusStep(dir int) {
+	if cam := m.router.ActiveCamera(); cam != nil {
+		cam.InquireFocus(queryFocusStep{dir: dir})
+	}
+}
+
+// processFocusHold escalates a held FOCUS button to a continuous speed-1 jog
+// once focusHoldMs has elapsed. The tap-time FocusDirect step has already
+// fired; this is the coarse-travel mode for a sustained hold.
+func (m *model) processFocusHold() {
+	if m.lastFocusJog == 0 || m.focusHeldJog {
+		return
+	}
+	if time.Since(m.focusPressAt) < time.Duration(focusHoldMs)*time.Millisecond {
+		return
+	}
+	cam := m.router.ActiveCamera()
+	if cam == nil {
+		return
+	}
+	m.focusHeldJog = true
+	if m.lastFocusJog < 0 {
+		visca.FocusFar(cam, maxFocusSpeed)
+	} else {
+		visca.FocusNear(cam, maxFocusSpeed)
+	}
+	m.cmdCount++
+	m.addLog("Focus jog (held)")
+}
+
+// startFocusPulse / processFocusPulse implement a PWM jog (sub-speed-1 via
+// duty cycling). Currently BYPASSED in favor of the step+hold model above,
+// but retained for possible re-enable — wire processFocusPulse back into the
+// tick loop and call startFocusPulse from the FOCUS press handlers.
+func (m *model) startFocusPulse() {
+	m.focusPulseOn = true
+	m.focusPulseAt = time.Now()
+}
+
+func (m *model) processFocusPulse() {
+	if m.lastFocusJog == 0 || focusPulseOffMs <= 0 {
+		return
+	}
+	cam := m.router.ActiveCamera()
+	if cam == nil {
+		return
+	}
+	now := time.Now()
+	if m.focusPulseOn {
+		if now.Sub(m.focusPulseAt) >= time.Duration(focusPulseOnMs)*time.Millisecond {
+			visca.FocusStop(cam)
+			m.focusPulseOn = false
+			m.focusPulseAt = now
+		}
+	} else if now.Sub(m.focusPulseAt) >= time.Duration(focusPulseOffMs)*time.Millisecond {
+		if m.lastFocusJog < 0 {
+			visca.FocusFar(cam, maxFocusSpeed)
+		} else {
+			visca.FocusNear(cam, maxFocusSpeed)
+		}
+		m.focusPulseOn = true
+		m.focusPulseAt = now
 	}
 }
 
@@ -2149,6 +2278,11 @@ func main() {
 		fmt.Println(config.DefaultConfig().DumpJSON())
 		return
 	}
+
+	focusStep = *flagFocusStep
+	focusHoldMs = *flagFocusHoldMs
+	focusPulseOnMs = *flagFocusOnMs
+	focusPulseOffMs = *flagFocusOffMs
 
 	// Load controller config: explicit flag > controller.json > built-in default
 	cfg := config.DefaultConfig()

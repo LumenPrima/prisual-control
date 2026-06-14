@@ -28,6 +28,13 @@ func positionNibbles(pos uint16) (byte, byte, byte, byte) {
 		byte(pos & 0x0F)
 }
 
+// FocusDirect sets an absolute focus position. The camera must be in manual
+// focus mode (SetManualFocus) first or the command is ignored.
+func FocusDirect(c Sender, position uint16) error {
+	p, q, r, s := positionNibbles(position)
+	return c.Send([]byte{0x81, 0x01, 0x04, 0x48, p, q, r, s, 0xFF})
+}
+
 // FocusStop stops variable-speed manual focus movement.
 func FocusStop(c Sender) error {
 	return c.Send([]byte{0x81, 0x01, 0x04, 0x08, 0x00, 0xFF})
